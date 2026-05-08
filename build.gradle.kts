@@ -7,9 +7,21 @@ group = "org.example"
 version = "1.0.0"
 
 repositories {
-    mavenCentral()
+    maven("https://artifactory.tcsbank.ru/artifactory/maven-proxy")
+    maven("https://artifactory.tcsbank.ru/artifactory/maven-all/")
+    maven("https://artifactory.tcsbank.ru/artifactory/maven-intellij-dependencies-proxy/")
+    maven("https://nexus.tcsbank.ru/repository/mvn-intellij-plugins-proxy/")
+    maven("https://nexus.tcsbank.ru/repository/mvn-intellij-repository/")
     intellijPlatform {
-        defaultRepositories()
+        androidStudioInstallers {
+            url = uri("https://artifactory.tcsbank.ru/artifactory/raw-android-studio-proxy")
+        }
+        releases {
+            url = uri("https://nexus.tcsbank.ru/repository/mvn-intellij-repository/release")
+        }
+        localPlatformArtifacts()
+        intellijDependencies()
+        marketplace()
     }
 }
 
@@ -45,5 +57,9 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+
+    runIde {
+        jvmArgs("-Xmx20g")
     }
 }
