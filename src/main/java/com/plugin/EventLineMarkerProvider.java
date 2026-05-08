@@ -9,6 +9,9 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
@@ -22,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.*;
 
 import javax.swing.*;
+import java.awt.event.MouseEvent;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -54,8 +58,6 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
         if (targetClass == null || !KtEventUtil.isEventClass(targetClass)) return;
 
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(element);
-
         boolean isDeclaration = element.getParent() == targetClass;
         boolean isInsideUpdateFile = element.getContainingFile().getName().contains("Update");
 
@@ -75,41 +77,71 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
             Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
             if (editor == null) return;
 
-            ApplicationManager.getApplication().executeOnPooledThread(() -> {
-                List<PsiElement> targets = ReadAction.compute(() -> {
-                    List<PsiElement> res = searchFunc.apply(targetClass, ScopeBuilder.getModuleScope(elt));
-                    if (res == null || res.isEmpty()) {
-                        res = searchFunc.apply(targetClass, ScopeBuilder.getProductionScope(elt));
-                    }
-                    return res;
-                });
-                ApplicationManager.getApplication().invokeLater(() -> {
-                    createLog("Go to " + title, element.getProject().getName());
+            String fqName = targetClass.getFqName() != null ? targetClass.getFqName().asString() : targetClass.getName();
+            String lockKey = fqName + ":" + title;
 
-                    if (targets.isEmpty()) {
-                        JBPopupFactory.getInstance()
-                                .createHtmlTextBalloonBuilder("Not found for " + title, MessageType.INFO, null)
-                                .setFadeoutTime(3000) // Исчезнет через 3 секунды
-                                .createBalloon()
-                                .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
-                        return;
-                    }
+            if (!SearchLock.tryLock(lockKey)) {
+                showBalloon(mouseEvent, "Search already in progress", MessageType.INFO);
+                return;
+            }
 
-                    if (targets.size() == 1) {
-                        ((Navigatable) targets.getFirst()).navigate(true);
-                    } else {
-                        new PsiTargetNavigator<>(targets)
-                                .presentationProvider(ContextPresentationProvider::getPresentation)
-                                .createPopup(elt.getProject(), "Go to " + title)
-                                .show(new RelativePoint(mouseEvent));
+            ProgressManager.getInstance().run(new Task.Backgroundable(elt.getProject(), "Go to " + title, true) {
+                @Override
+                public void run(@NotNull ProgressIndicator indicator) {
+                    indicator.setIndeterminate(true);
+                    try {
+                        indicator.setText("Searching in module...");
+                        List<PsiElement> targets = ReadAction.compute(() ->
+                                searchFunc.apply(targetClass, ScopeBuilder.getModuleScope(elt)));
 
+                        String scope = "module";
+                        if ((targets == null || targets.isEmpty()) && !indicator.isCanceled()) {
+                            indicator.setText("Searching in project...");
+                            targets = ReadAction.compute(() ->
+                                    searchFunc.apply(targetClass, ScopeBuilder.getProductionScope(elt)));
+                            scope = "project";
+                        }
+
+                        if (indicator.isCanceled()) return;
+
+                        final List<PsiElement> finalTargets = targets != null ? targets : List.of();
+                        final String finalScope = scope;
+                        ApplicationManager.getApplication().invokeLater(() -> {
+                            createLog("Go to " + title, elt.getProject().getName());
+                            showResults(finalTargets, title, finalScope, mouseEvent, elt);
+                        });
+                    } finally {
+                        SearchLock.unlock(lockKey);
                     }
-                });
+                }
             });
         };
 
         return new RelatedItemLineMarkerInfo<>(element, element.getTextRange(), icon, elt -> "Go to " + title, navHandler,
                 GutterIconRenderer.Alignment.CENTER, () -> List.of());
+    }
+
+    private void showResults(List<PsiElement> targets, String title, String scope, MouseEvent mouseEvent, PsiElement elt) {
+        if (targets.isEmpty()) {
+            showBalloon(mouseEvent, "No " + title.toLowerCase() + " usages found", MessageType.INFO);
+            return;
+        }
+        if (targets.size() == 1) {
+            ((Navigatable) targets.getFirst()).navigate(true);
+        } else {
+            new PsiTargetNavigator<>(targets)
+                    .presentationProvider(ContextPresentationProvider::getPresentation)
+                    .createPopup(elt.getProject(), "Go to " + title + " — " + scope)
+                    .show(new RelativePoint(mouseEvent));
+        }
+    }
+
+    private void showBalloon(MouseEvent mouseEvent, String message, MessageType type) {
+        JBPopupFactory.getInstance()
+                .createHtmlTextBalloonBuilder(message, type, null)
+                .setFadeoutTime(3000)
+                .createBalloon()
+                .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
     }
 
     private void createLog(String title, String project) {

@@ -9,25 +9,22 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.popup.Balloon;
-import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
-import com.intellij.openapi.ui.popup.PopupStep;
-import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.uast.*;
 
 import javax.swing.*;
-import javax.swing.text.Element;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -114,37 +111,60 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
         if (!isCommandsHandler(uCommand, targetCommand)) return;
 
-
         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission);
 
         result.add(marker);
     }
 
-    private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, PsiClass targetCommand, Icon icon, String title ,BiFunction<UClass, GlobalSearchScope, List<PsiElement>> searchFunc) {
-        GutterIconNavigationHandler<PsiElement> navHandler = ((mouseEvent, element1) -> {
-            Editor e = FileEditorManager.getInstance(element1.getProject()).getSelectedTextEditor();
-            if (e != null) {
-                RelativePoint point = new RelativePoint(mouseEvent);
-                String project = element.getProject().getName();
+    private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, PsiClass targetCommand, Icon icon, String title,
+                                                            BiFunction<UClass, GlobalSearchScope, List<PsiElement>> searchFunc) {
+        GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) -> {
+            Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
+            if (editor == null) return;
 
-                ApplicationManager.getApplication().executeOnPooledThread(() -> {
-                    List<PsiElement> targets = ReadAction.compute(() -> {
-                        UClass uClass = UastContextKt.toUElement(targetCommand, UClass.class);
-                        List<PsiElement> result = searchFunc.apply(uClass, ScopeBuilder.getModuleScope(element));
+            String className = targetCommand.getQualifiedName() != null
+                    ? targetCommand.getQualifiedName() : targetCommand.getName();
+            String lockKey = className + ":" + title;
 
-                        if (result.isEmpty()) result = searchFunc.apply(uClass, ScopeBuilder.getProductionScope(element));
-
-                        return result;
-                    });
-
-                    ApplicationManager.getApplication().invokeLater(() -> {
-                        createLog(title, project);
-
-                        navigation(targets, title, point, mouseEvent, element1);
-                    });
-                });
+            if (!SearchLock.tryLock(lockKey)) {
+                showBalloon(mouseEvent, "Search already in progress", MessageType.INFO);
+                return;
             }
-        });
+
+            String project = elt.getProject().getName();
+
+            ProgressManager.getInstance().run(new Task.Backgroundable(elt.getProject(), title, true) {
+                @Override
+                public void run(@NotNull ProgressIndicator indicator) {
+                    indicator.setIndeterminate(true);
+                    try {
+                        indicator.setText("Searching in module...");
+                        UClass uClass = UastContextKt.toUElement(targetCommand, UClass.class);
+                        List<PsiElement> targets = ReadAction.compute(() ->
+                                searchFunc.apply(uClass, ScopeBuilder.getModuleScope(element)));
+
+                        String scope = "module";
+                        if ((targets == null || targets.isEmpty()) && !indicator.isCanceled()) {
+                            indicator.setText("Searching in project...");
+                            targets = ReadAction.compute(() ->
+                                    searchFunc.apply(uClass, ScopeBuilder.getProductionScope(element)));
+                            scope = "project";
+                        }
+
+                        if (indicator.isCanceled()) return;
+
+                        final List<PsiElement> finalTargets = targets != null ? targets : List.of();
+                        final String finalScope = scope;
+                        ApplicationManager.getApplication().invokeLater(() -> {
+                            createLog(title, project);
+                            showResults(finalTargets, title, finalScope, mouseEvent, elt);
+                        });
+                    } finally {
+                        SearchLock.unlock(lockKey);
+                    }
+                }
+            });
+        };
 
         return new RelatedItemLineMarkerInfo<>(
                 element,
@@ -157,25 +177,27 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
         );
     }
 
-    private void navigation(List<PsiElement> targets, String title, RelativePoint point, MouseEvent mouseEvent, PsiElement elt) {
+    private void showResults(List<PsiElement> targets, String title, String scope, MouseEvent mouseEvent, PsiElement elt) {
         if (targets.isEmpty()) {
-            JBPopupFactory.getInstance()
-                    .createHtmlTextBalloonBuilder("Not found for " + title, MessageType.INFO, null)
-                    .setFadeoutTime(3000) // Исчезнет через 3 секунды
-                    .createBalloon()
-                    .show(point, Balloon.Position.atRight);
+            showBalloon(mouseEvent, "No " + title.trim().toLowerCase() + " usages found", MessageType.INFO);
             return;
         }
-
         if (targets.size() == 1) {
             ((Navigatable) targets.getFirst()).navigate(true);
-        }
-        else {
+        } else {
             new PsiTargetNavigator<>(targets)
                     .presentationProvider(ContextPresentationProvider::getPresentation)
-                    .createPopup(elt.getProject(), "Go to " + title)
+                    .createPopup(elt.getProject(), title.trim() + " — " + scope)
                     .show(new RelativePoint(mouseEvent));
         }
+    }
+
+    private void showBalloon(MouseEvent mouseEvent, String message, MessageType type) {
+        JBPopupFactory.getInstance()
+                .createHtmlTextBalloonBuilder(message, type, null)
+                .setFadeoutTime(3000)
+                .createBalloon()
+                .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
     }
 
     private boolean isCommand(PsiClass psiClass) {
