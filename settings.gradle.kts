@@ -1,1 +1,8 @@
-rootProject.name = "IDE-plugin"
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "KoTEA companion"
