@@ -6,7 +6,6 @@ import com.intellij.psi.search.GlobalSearchScope;
 import org.jetbrains.uast.*;
 
 import java.util.List;
-import java.util.Map;
 
 public class CommandProcessingAction extends BaseAction {
     @Override
@@ -25,15 +24,6 @@ public class CommandProcessingAction extends BaseAction {
     @Override
     protected String getOperation() {
         return "Processing";
-    }
-
-    @Override
-    protected void createLog(String project) {
-        AnalyticsService.log("hot-key", Map.of(
-                "type", "Command",
-                "feature", "Go to Processing",
-                "project", project
-        ));
     }
 
     @Override

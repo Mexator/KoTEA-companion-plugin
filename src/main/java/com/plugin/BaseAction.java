@@ -32,8 +32,6 @@ public class BaseAction extends AnAction {
 
     protected String getOperation() { return ""; }
 
-    protected void createLog(String project) {}
-
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         PsiElement element = e.getData(CommonDataKeys.PSI_ELEMENT);
@@ -63,7 +61,6 @@ public class BaseAction extends AnAction {
                     if (indicator.isCanceled()) return;
 
                     ApplicationManager.getApplication().invokeLater(() -> {
-                        createLog(targetClass.getProject().getName());
                         if (targets == null || targets.isEmpty()) {
                             HintManager.getInstance().showInformationHint(editor,
                                     "No " + getOperation().toLowerCase() + " usages found.");
