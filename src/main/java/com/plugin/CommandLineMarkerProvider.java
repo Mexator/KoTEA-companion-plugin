@@ -26,7 +26,6 @@ import javax.swing.*;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiFunction;
 
 public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
@@ -156,7 +155,6 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
                         final List<PsiElement> finalTargets = targets != null ? targets : List.of();
                         final String finalScope = scope;
                         ApplicationManager.getApplication().invokeLater(() -> {
-                            createLog(title, project);
                             showResults(finalTargets, title, finalScope, mouseEvent, elt);
                         });
                     } finally {
@@ -233,11 +231,4 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
         return false;
     }
 
-    private void createLog(String title, String project) {
-       AnalyticsService.log("gutter-icon", Map.of(
-                "type", "Command",
-                "feature", title,
-               "project", project
-        ));
-    }
 }

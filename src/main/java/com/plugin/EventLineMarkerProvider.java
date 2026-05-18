@@ -28,7 +28,6 @@ import javax.swing.*;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.function.BiFunction;
 
 public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
@@ -107,7 +106,6 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
                         final List<PsiElement> finalTargets = targets != null ? targets : List.of();
                         final String finalScope = scope;
                         ApplicationManager.getApplication().invokeLater(() -> {
-                            createLog("Go to " + title, elt.getProject().getName());
                             showResults(finalTargets, title, finalScope, mouseEvent, elt);
                         });
                     } finally {
@@ -144,11 +142,4 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
     }
 
-    private void createLog(String title, String project) {
-        AnalyticsService.log("gutter-icon", Map.of(
-                "type", "Event",
-                "feature", title,
-                "project", project
-        ));
-    }
 }

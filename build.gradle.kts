@@ -34,10 +34,6 @@ dependencies {
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("org.jetbrains.android")
     }
-
-    dependencies {
-        implementation("com.posthog.java:posthog:1.2.0")
-    }
 }
 
 intellijPlatform {

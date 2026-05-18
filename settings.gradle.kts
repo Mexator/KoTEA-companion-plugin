@@ -4,4 +4,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "IDE-plugin"
+rootProject.name = "KoTEA companion"
