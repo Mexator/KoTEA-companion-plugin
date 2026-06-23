@@ -1,3 +1,6 @@
+# OS temporary files
+.DS_Store*
+
 **/build/**
 .gradle
 .intellijPlatform
