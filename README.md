@@ -1,9 +1,6 @@
 # KoTEA Companion Plugin
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)]()
-[![Platform](https://img.shields.io/badge/platform-IntelliJ%20%7C%20Android%20Studio-green.svg)]()
-
-**IDE-plugin** is a native plugin for Android Studio (based on IDEA 2025.3 and higher). The tool is designed to simplify navigation and improve Developer Experience in projects using the KoTEA architectural pattern.
+**KoTEA-companion-plugin** is a native plugin for Android Studio (based on IDEA 2025.3 and higher). The tool is designed to simplify navigation and improve Developer Experience in projects using the KoTEA architectural pattern.
 
 ## The Problem
 

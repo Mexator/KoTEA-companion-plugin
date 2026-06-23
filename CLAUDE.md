@@ -44,7 +44,6 @@ One searcher per navigation direction: `EventEmissionSearcher`, `EventProcessing
 - **`ScopeBuilder`** — restricts searches to production sources, avoiding false matches in test files.
 - **`KtEventUtil`** — handles Kotlin-specific PSI quirks (sealed classes, companion objects) that UAST doesn't fully abstract.
 - **`CachedValuesManager`** — caches searcher results; invalidated by file changes automatically.
-- **`AnalyticsService`** — PostHog telemetry; uses a custom SSL client and is depersonalized.
 - **`ContextPresentationProvider`** — controls how navigation results appear in the "Choose Target" popup.
 
 ### Plugin Registration
