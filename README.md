@@ -35,12 +35,6 @@ The plugin automatically places convenient markers in the editor's gutter:
 * **Smart Caching:** By utilizing `CachedValuesManager`, navigation results are kept in memory. Repeated transitions happen instantly.
 * **Smart Scope:** The search prioritizes the local Gradle module and safely ignores test directories.
 
-## Telemetry & Privacy
-
-The plugin includes anonymous product analytics powered by PostHog to track UX metrics (e.g., the usage ratio between "Emission" and "Processing" actions).
-* Only depersonalized interaction events are collected.
-* Network requests are handled by a custom lightweight HttpClient.
-
 ## Installation
 
 1. Download the latest `.zip` file from the Releases page.
