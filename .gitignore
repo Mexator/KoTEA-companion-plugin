@@ -4,3 +4,7 @@
 **/build/**
 .gradle
 .intellijPlatform
+.artifacts
+
+# User-specific
+local.properties

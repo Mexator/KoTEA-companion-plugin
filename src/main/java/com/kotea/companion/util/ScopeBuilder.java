@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.util;
 
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
@@ -8,8 +8,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.ProjectScopeBuilder;
-import org.bouncycastle.math.raw.Mod;
-import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 
 public class ScopeBuilder {
@@ -61,6 +59,7 @@ public class ScopeBuilder {
 
     public static GlobalSearchScope getModuleScope(@NotNull PsiElement e) {
         Module module = ModuleUtilCore.findModuleForPsiElement(e);
+        if (module == null) return GlobalSearchScope.EMPTY_SCOPE;
         GlobalSearchScope moduleScope = GlobalSearchScope.moduleScope(module);
 
         return new GlobalSearchScope() {

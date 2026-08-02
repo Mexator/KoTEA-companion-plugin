@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.actions;
 
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.codeInsight.navigation.PsiTargetNavigator;
@@ -15,22 +15,25 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
-
+import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.ScopeBuilder;
+import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-public class BaseAction extends AnAction {
+public abstract class BaseAction extends AnAction {
 
-    protected List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope) {
-        return null;
+    protected abstract List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope);
+
+    protected PsiElement findTargetClass(PsiElement element) {
+        return KoTEAUtil.tryResolveToKoTEAClass(element);
     }
 
-    protected PsiElement findTargetClass(PsiElement element) { return null; }
+    protected abstract String getTitle();
 
-    protected String getTitle() { return " "; }
-
-    protected String getOperation() { return ""; }
+    protected abstract String getOperation();
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {

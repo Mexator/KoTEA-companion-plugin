@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.events;
 
 import com.intellij.codeInsight.daemon.GutterIconNavigationHandler;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
@@ -21,6 +21,10 @@ import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
+import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.PluginIcons;
+import com.kotea.companion.util.ScopeBuilder;
+import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.*;
 
@@ -30,7 +34,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.BiFunction;
 
-public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
+public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
 
     @Override
     protected void collectNavigationMarkers(@NotNull PsiElement element,
@@ -53,9 +57,9 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
         if (PsiTreeUtil.getParentOfType(element, KtSuperTypeList.class) != null) return;
 
-        KtClassOrObject targetClass = KtEventUtil.tryResolveToClass(element);
+        KtClassOrObject targetClass = EventUtil.tryResolveToClass(element);
 
-        if (targetClass == null || !KtEventUtil.isEventClass(targetClass)) return;
+        if (targetClass == null || !EventUtil.isEventClass(targetClass)) return;
 
         boolean isDeclaration = element.getParent() == targetClass;
         boolean isInsideUpdateFile = element.getContainingFile().getName().contains("Update");
@@ -141,5 +145,4 @@ public class EventLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 .createBalloon()
                 .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
     }
-
 }

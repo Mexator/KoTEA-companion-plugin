@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.commands;
 
 import com.intellij.codeInsight.daemon.GutterIconNavigationHandler;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
@@ -19,6 +19,11 @@ import com.intellij.pom.Navigatable;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
+import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.PluginIcons;
+import com.kotea.companion.util.ScopeBuilder;
+import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
 
@@ -28,7 +33,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.BiFunction;
 
-public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
+public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
     @Override
     protected void collectNavigationMarkers(@NotNull PsiElement element,
@@ -49,7 +54,7 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
 
         if (psiClass.isInterface()) return;
 
-        if (isCommand(psiClass)) {
+        if (KoTEAUtil.isCommand(psiClass)) {
 
             PsiElement identifier = psiClass.getNameIdentifier();
             if (identifier == null) return;
@@ -68,7 +73,7 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
         PsiMethod constructor = callExpression.resolve();
         if (constructor != null && constructor.isConstructor()) {
             PsiClass constructedClass = constructor.getContainingClass();
-            if (constructedClass != null && isCommand(constructedClass)) {
+            if (constructedClass != null && KoTEAUtil.isCommand(constructedClass)) {
                 UClass uCommand = UastContextKt.toUElement(constructedClass, UClass.class);
                 if (uCommand != null) {
                     RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
@@ -88,7 +93,7 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
             if (call != null) {
                 if (call.getValueArguments().contains(uElement) || call.getValueArguments().contains(parent)) {
                     PsiElement res = ref.resolve();
-                    if (res instanceof PsiClass psiClass && isCommand(psiClass)) {
+                    if (res instanceof PsiClass psiClass && KoTEAUtil.isCommand(psiClass)) {
                         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, psiClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
                         result.add(marker);
                     }
@@ -108,7 +113,7 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
         UClass uCommand = UastUtils.getParentOfType(ref, UClass.class);
         if (uCommand == null) return;
 
-        if (!isCommandsHandler(uCommand, targetCommand)) return;
+        if (!KoTEAUtil.isCommandsHandler(uCommand, targetCommand)) return;
 
         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission);
 
@@ -129,8 +134,6 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 showBalloon(mouseEvent, "Search already in progress", MessageType.INFO);
                 return;
             }
-
-            String project = elt.getProject().getName();
 
             ProgressManager.getInstance().run(new Task.Backgroundable(elt.getProject(), title, true) {
                 @Override
@@ -171,7 +174,7 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 elt -> title,
                 navHandler,
                 GutterIconRenderer.Alignment.CENTER,
-                () -> List.of()
+                List::of
         );
     }
 
@@ -197,38 +200,4 @@ public class CommandLineMarkerProvider extends RelatedItemLineMarkerProvider {
                 .createBalloon()
                 .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
     }
-
-    private boolean isCommand(PsiClass psiClass) {
-        for (PsiClass superClass : psiClass.getSupers()) {
-            String name = superClass.getName();
-
-            if (name != null && name.contains("Command") && !name.contains("Handler")) return true;
-        }
-
-        return false;
-    }
-
-    private boolean isCommandsHandler(UClass handlerClass, PsiClass commandClass) {
-        PsiType commandType = JavaPsiFacade.getElementFactory(commandClass.getProject())
-                .createType(commandClass);
-
-        for (UTypeReferenceExpression superTypeRef : handlerClass.getUastSuperTypes()) {
-
-            PsiType type = superTypeRef.getType();
-            if (!(type instanceof PsiClassType classType)) continue;
-
-            PsiClass resolved = classType.resolve();
-            if (resolved == null || !"CommandsFlowHandler".equals(resolved.getName())) continue;
-
-            PsiType[] params = classType.getParameters();
-            if (params.length == 0) continue;
-
-            PsiType firstParam = params[0];
-
-            return firstParam.isAssignableFrom(commandType);
-        }
-
-        return false;
-    }
-
 }

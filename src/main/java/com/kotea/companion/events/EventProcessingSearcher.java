@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.events;
 
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
@@ -12,16 +12,16 @@ import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtImportDirective;
-import org.jetbrains.kotlin.psi.KtTypeReference;
+import org.jetbrains.kotlin.psi.KtParameter;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class EventEmissionSearcher {
+public class EventProcessingSearcher {
 
-    public static List<PsiElement> findEmissions(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
+    public static List<PsiElement> findProcessing(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
         Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(target,
                 () -> {
                     Map<GlobalSearchScope, List<PsiElement>> map = new ConcurrentHashMap<>();
@@ -32,21 +32,20 @@ public class EventEmissionSearcher {
     }
 
     private static List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
-        // Narrow scope before search so the indexer skips Update files entirely.
-        GlobalSearchScope emissionScope = new DelegatingGlobalSearchScope(scope) {
+        GlobalSearchScope processingScope = new DelegatingGlobalSearchScope(scope) {
             @Override
             public boolean contains(@NotNull VirtualFile file) {
-                return super.contains(file) && !file.getName().contains("Update");
+                return super.contains(file) && file.getName().contains("Update");
             }
         };
 
-        List<PsiElement> emissionPlaces = new ArrayList<>();
-        for (var ref : ReferencesSearch.search(target, emissionScope, false).findAll()) {
+        List<PsiElement> results = new ArrayList<>();
+        for (var ref : ReferencesSearch.search(target, processingScope, false).findAll()) {
             PsiElement el = ref.getElement();
             if (PsiTreeUtil.getParentOfType(el, KtImportDirective.class) != null) continue;
-            if (PsiTreeUtil.getParentOfType(el, KtTypeReference.class) != null) continue;
-            emissionPlaces.add(el);
+            if (PsiTreeUtil.getParentOfType(el, KtParameter.class) != null) continue;
+            results.add(el);
         }
-        return emissionPlaces;
+        return results;
     }
 }

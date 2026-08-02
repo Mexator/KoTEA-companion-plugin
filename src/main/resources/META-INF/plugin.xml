@@ -34,39 +34,25 @@
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.lineMarkerProvider
                 language="kotlin"
-                implementationClass="com.plugin.CommandLineMarkerProvider"/>
+                implementationClass="com.kotea.companion.commands.CommandMarkerProvider"/>
         <codeInsight.lineMarkerProvider
                 language="kotlin"
-                implementationClass="com.plugin.EventLineMarkerProvider"/>
+                implementationClass="com.kotea.companion.events.EventMarkerProvider"/>
     </extensions>
 
     <actions>
-        <group id = "Navigation" text = "Command Navigation" popup="true" icon="AllIcons.Actions.Search">
+        <group id = "KoTEA.Navigation" text = "KoTEA Navigation" popup="true" icon="AllIcons.Actions.Search">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <action id="Emission"
-                    class="com.plugin.CommandEmissionAction"
+                    class="com.kotea.companion.actions.EmissionAction"
                     text="Go to Emission">
                 <keyboard-shortcut first-keystroke="control alt M" keymap="$default"/>
             </action>
 
             <action id="Processing"
-                    class="com.plugin.CommandProcessingAction"
+                    class="com.kotea.companion.actions.ProcessingAction"
                     text="Go to Processing">
                 <keyboard-shortcut first-keystroke="control alt K" keymap="$default"/>
-            </action>
-        </group>
-        <group id = "Event.Navigation" text = "Event Navigation" popup="true" icon="AllIcons.Actions.Search">
-            <add-to-group group-id="EditorPopupMenu" anchor="after" relative-to-action="Navigation"/>
-            <action id="Event.Emission"
-                    class="com.plugin.EventEmissionAction"
-                    text="Go to Emission">
-                <keyboard-shortcut first-keystroke="control alt E" keymap="$default"/>
-            </action>
-
-            <action id="Event.Processing"
-                    class="com.plugin.EventProcessingAction"
-                    text="Go to Processing">
-                <keyboard-shortcut first-keystroke="control alt R" keymap="$default"/>
             </action>
         </group>
     </actions>

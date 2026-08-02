@@ -1,18 +1,18 @@
-package com.plugin;
+package com.kotea.companion.util;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-final class SearchLock {
+public final class SearchLock {
     private static final Set<String> active = ConcurrentHashMap.newKeySet();
 
     private SearchLock() {}
 
-    static boolean tryLock(String key) {
+    public static boolean tryLock(String key) {
         return active.add(key);
     }
 
-    static void unlock(String key) {
+    public static void unlock(String key) {
         active.remove(key);
     }
 }

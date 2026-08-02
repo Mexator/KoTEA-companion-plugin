@@ -1,17 +1,12 @@
-package com.plugin;
+package com.kotea.companion.util;
 
-import com.intellij.ide.util.PsiElementListCellRenderer;
 import com.intellij.openapi.editor.Document;
-import com.intellij.openapi.util.NlsSafe;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.platform.backend.presentation.TargetPresentation;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
 
 public class ContextPresentationProvider {
 

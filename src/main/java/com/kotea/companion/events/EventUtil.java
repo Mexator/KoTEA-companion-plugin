@@ -1,4 +1,4 @@
-package com.plugin;
+package com.kotea.companion.events;
 
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReference;
@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.*;
 
-public class KtEventUtil {
+public class EventUtil {
 
     public static boolean isEventClass(KtClassOrObject ktClass) {
         return CachedValuesManager.getCachedValue(ktClass, () ->
@@ -36,7 +36,6 @@ public class KtEventUtil {
         return false;
     }
 
-    // Separate cache key from isEventClass so both can live on the same KtClassOrObject.
     private static boolean isInEventSuperTypeHierarchy(KtClassOrObject ktClass) {
         return CachedValuesManager.getCachedValue(ktClass, () ->
                 CachedValueProvider.Result.create(computeIsInEventSuperTypeHierarchy(ktClass), PsiModificationTracker.MODIFICATION_COUNT));
