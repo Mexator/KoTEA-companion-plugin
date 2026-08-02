@@ -1,20 +1,25 @@
 <!-- Plugin Configuration File: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <!-- Unique identifier of the plugin. It should be FQN, cannot be changed between the plugin versions. -->
-    <id>org.example.IDE-plugin</id>
+    <id>com.kotea.companion</id>
 
     <!-- Public plugin name should be written in Title Case.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
     <name>KoTEA companion</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <vendor url="https://github.com/Mexator/KoTEA-companion-plugin">KoTEA Team</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Enter short description for your plugin here.<br>
-        <em>most HTML tags may be used</em>
+        <b>KoTEA Companion</b> is an Android Studio plugin designed to improve Developer Experience in projects using the KoTEA architectural pattern.<br><br>
+        The plugin simplifies navigation by creating a contextual bridge between the points of generation (Emission) and execution (Processing) of Events and Commands.
+        <ul>
+            <li><b>Go to emission:</b> Instantly jump to where an event or command is dispatched.</li>
+            <li><b>Go to processing:</b> Navigate to the Update class or CommandsFlowHandler where the logic is handled.</li>
+            <li><b>Interactive Gutter Icons:</b> Quick navigation markers in the editor gutter for declarations, call sites, and handlers.</li>
+        </ul>
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.
