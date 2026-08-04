@@ -31,7 +31,7 @@ The plugin has three layers that work together for each navigable element type (
 `EventLineMarkerProvider.java` and `CommandLineMarkerProvider.java` register with IntelliJ's `lineMarkerProvider` extension point. They detect KoTEA elements in PSI/UAST and attach clickable gutter icons (emission/processing) that trigger the corresponding action.
 
 ### 2. Actions
-`EventEmissionAction`, `EventProcessingAction`, `CommandEmissionAction`, `CommandProcessingAction` (all extending `BaseAction`) respond to gutter icon clicks and keyboard shortcuts:
+`EventEmissionAction`, `EventProcessingAction`, `CommandEmissionAction`, `CommandProcessingAction` (all extending `BaseGoToAction`) respond to gutter icon clicks and keyboard shortcuts:
 - `Ctrl+Alt+E` → Event Emission
 - `Ctrl+Alt+R` → Event Processing
 - `Ctrl+Alt+M` → Command Emission

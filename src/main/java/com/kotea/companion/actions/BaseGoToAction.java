@@ -23,7 +23,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-public abstract class BaseAction extends AnAction {
+public abstract class BaseGoToAction extends AnAction {
 
     protected abstract List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope);
 

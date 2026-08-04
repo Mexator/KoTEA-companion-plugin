@@ -49,13 +49,13 @@
         <group id = "KoTEA.Navigation" text = "KoTEA Navigation" popup="true" icon="AllIcons.Actions.Search">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <action id="Emission"
-                    class="com.kotea.companion.actions.EmissionAction"
+                    class="com.kotea.companion.actions.GoToEmissionAction"
                     text="Go to Emission">
                 <keyboard-shortcut first-keystroke="control alt M" keymap="$default"/>
             </action>
 
             <action id="Processing"
-                    class="com.kotea.companion.actions.ProcessingAction"
+                    class="com.kotea.companion.actions.GoToProcessingAction"
                     text="Go to Processing">
                 <keyboard-shortcut first-keystroke="control alt K" keymap="$default"/>
             </action>

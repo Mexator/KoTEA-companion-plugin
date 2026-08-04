@@ -11,7 +11,7 @@ import org.jetbrains.uast.UastContextKt;
 
 import java.util.List;
 
-public class ProcessingAction extends BaseAction {
+public class GoToProcessingAction extends BaseGoToAction {
 
     @Override
     protected List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope) {
