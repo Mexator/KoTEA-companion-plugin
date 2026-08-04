@@ -15,7 +15,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        androidStudio("2025.3.1.1")
+        local(file("/home/anton/.local/share/JetBrains/Toolbox/apps/android-studio/"))
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         bundledPlugin("com.intellij.java")
@@ -59,6 +59,6 @@ tasks {
     }
 
     runIde {
-        jvmArgs("-Xmx20g")
+        jvmArgs("-Xmx20g", "-Dandroid.sdk.analytics.disabled=true", "-Dstudio.ml.enabled=false")
     }
 }
