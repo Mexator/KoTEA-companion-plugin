@@ -45,6 +45,7 @@
                 language="kotlin"
                 implementationClass="com.kotea.companion.events.EventMarkerProvider"/>
         <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
+        <fileBasedIndex implementation="com.kotea.companion.index.KoTEASuperTypeNameIndex"/>
     </extensions>
 
     <actions>

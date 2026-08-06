@@ -1,22 +1,29 @@
 package com.kotea.companion.index;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.PsiSubstitutor;
 import com.intellij.psi.PsiType;
 import com.intellij.psi.PsiTypeParameter;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.search.ProjectScope;
 import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.TypeConversionUtil;
+import com.intellij.util.indexing.FileBasedIndex;
+import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
 import org.jetbrains.kotlin.asJava.classes.KtLightClass;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
+import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtReferenceExpression;
 import org.jetbrains.kotlin.psi.KtSuperTypeListEntry;
 import org.jetbrains.kotlin.psi.KtTypeElement;
@@ -39,12 +46,12 @@ public final class KoTEAIndexComputer {
     }
 
     public static KoTEAIndex compute(Project project) {
-        GlobalSearchScope scope = GlobalSearchScope.allScope(project);
-        PsiClass updateClass = JavaPsiFacade.getInstance(project).findClass(UPDATE_FQN, scope);
+        GlobalSearchScope allScope = GlobalSearchScope.allScope(project);
+        PsiClass updateClass = JavaPsiFacade.getInstance(project).findClass(UPDATE_FQN, allScope);
         if (updateClass == null) return KoTEAIndex.EMPTY;
 
-        Set<PsiClass> inheritorSet = new HashSet<>(ClassInheritorsSearch.search(updateClass, scope, true).findAll());
-        Set<PsiClass> leaves = leafFilter(inheritorSet);
+        Set<PsiClass> candidates = discoverCandidates(project, updateClass);
+        Set<PsiClass> leaves = leafFilter(candidates);
 
         Set<PsiClass> rootEvents = new HashSet<>();
         Set<PsiClass> rootCommands = new HashSet<>();
@@ -77,6 +84,70 @@ public final class KoTEAIndexComputer {
         return new KoTEAIndex(rootEvents, rootCommands);
     }
 
+    /**
+     * Bounded fixed-point walk over {@link KoTEASuperTypeNameIndex}: starting from {@code Update}'s
+     * simple name plus any library-provided intermediate bases (e.g. {@code DslUpdate}, found via a
+     * one-off library-scope inheritor search, run unconditionally since a project may only ever
+     * literally reference the intermediate base and never {@code Update} itself), repeatedly finds
+     * project classes whose literal, syntactic supertype list mentions a name discovered so far, and
+     * queues each such class's own name for the next round. This discovers the small set of project
+     * classes related to the {@code Update} hierarchy in time proportional to that set, instead of a
+     * project-wide {@code ClassInheritorsSearch}. Test sources are excluded, matching the
+     * {@link ScopeBuilder} convention used elsewhere in this plugin.
+     * <p>
+     * Because names are matched as literal text with no cross-file resolution, a candidate is
+     * verified against {@code updateClass}'s real, resolved supertype chain (a cheap check bounded by
+     * that one candidate's inheritance depth, not the project) before it's kept or allowed to
+     * propagate the walk further - this both keeps unrelated same-named classes from expanding the
+     * search and guarantees every leaf handed to the generic-argument resolution below is a genuine
+     * inheritor. One inherent gap remains: a supertype referenced only through a typealias or an
+     * aliased import isn't discovered, since its literal token never matches a seed name.
+     */
+    private static Set<PsiClass> discoverCandidates(Project project, PsiClass updateClass) {
+        Set<String> seedNames = new HashSet<>();
+        String updateSimpleName = updateClass.getName();
+        if (updateSimpleName != null) seedNames.add(updateSimpleName);
+
+        GlobalSearchScope librariesScope = ProjectScope.getLibrariesScope(project);
+        for (PsiClass libraryBase : ClassInheritorsSearch.search(updateClass, librariesScope, true).findAll()) {
+            String name = libraryBase.getName();
+            if (name != null) seedNames.add(name);
+        }
+
+        GlobalSearchScope productionScope = ScopeBuilder.getProductionScope(project);
+        PsiManager psiManager = PsiManager.getInstance(project);
+        FileBasedIndex fileBasedIndex = FileBasedIndex.getInstance();
+
+        Set<PsiClass> candidates = new HashSet<>();
+        Set<String> visitedNames = new HashSet<>(seedNames);
+        Set<String> frontier = seedNames;
+
+        while (!frontier.isEmpty()) {
+            Set<VirtualFile> files = new HashSet<>();
+            for (String name : frontier) {
+                files.addAll(fileBasedIndex.getContainingFiles(KoTEASuperTypeNameIndex.NAME, name, productionScope));
+            }
+
+            Set<String> nextFrontier = new HashSet<>();
+            for (VirtualFile virtualFile : files) {
+                PsiFile psiFile = psiManager.findFile(virtualFile);
+                if (!(psiFile instanceof KtFile ktFile)) continue;
+
+                for (KtClassOrObject classOrObject : KoTEASuperTypeNameIndex.classesWithLiteralSuperType(ktFile, frontier)) {
+                    PsiClass psiClass = LightClassUtilsKt.toLightClass(classOrObject);
+                    if (psiClass == null || !InheritanceUtil.isInheritorOrSelf(psiClass, updateClass, true)) continue;
+
+                    candidates.add(psiClass);
+                    String name = classOrObject.getName();
+                    if (name != null && visitedNames.add(name)) nextFrontier.add(name);
+                }
+            }
+            frontier = nextFrontier;
+        }
+
+        return candidates;
+    }
+
     @Nullable
     private static PsiClass resolveClassArg(@Nullable PsiType type) {
         return type instanceof PsiClassType classType ? classType.resolve() : null;
@@ -102,7 +173,7 @@ public final class KoTEAIndexComputer {
             if (!(typeElement instanceof KtUserType userType)) continue;
 
             PsiClass superClass = resolveUserTypeClass(userType);
-            if (superClass == null || !InheritanceUtil.isInheritorOrSelf(superClass, updateClass, true)) continue;
+            if (!InheritanceUtil.isInheritorOrSelf(superClass, updateClass, true)) continue;
 
             List<KtTypeProjection> typeArgs = userType.getTypeArguments();
             if (typeArgs.size() < 3) continue;

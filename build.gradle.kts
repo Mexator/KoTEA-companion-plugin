@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.1.1"
+version = "1.2.0-PRE"
 
 repositories {
     mavenCentral()
@@ -61,13 +61,9 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.1.1</b>
+                <li><b>1.2.0-PRE</b>
                     <ul>
-                        <li>Updated plugin description and documentation.</li>
-                        <li>Added support for K2 Kotlin plugin mode.</li>
-                        <li>Improved gutter markers for Event/Command constructor calls.</li>
-                        <li>Added "Go to Processing" action for commands in Handlers.</li>
-                        <li>Performance optimizations for project-wide searches.</li>
+                        <li>Rework Events and Commands discovery via Update classes</li>
                     </ul>
                 </li>
             </ul>
