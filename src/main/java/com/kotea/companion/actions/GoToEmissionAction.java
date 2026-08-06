@@ -4,6 +4,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.commands.CommandEmissionSearcher;
 import com.kotea.companion.events.EventEmissionSearcher;
+import com.kotea.companion.events.EventUtil;
 import com.kotea.companion.util.KoTEAUtil;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.UClass;
@@ -14,12 +15,14 @@ import java.util.List;
 public class GoToEmissionAction extends BaseGoToAction {
 
     @Override
-    protected List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope) {
-        if (KoTEAUtil.isEvent(targetClass)) {
-            return EventEmissionSearcher.findEmissions((KtClassOrObject) targetClass, scope);
+    protected List<PsiElement> findTargets(PsiElement targetElement, GlobalSearchScope scope) {
+        if (!(targetElement instanceof KtClassOrObject targetClass)) return List.of();
+
+        if (EventUtil.isNavigableEventClass(targetClass)) {
+            return EventEmissionSearcher.findEmissions(targetClass, scope);
         }
 
-        if (KoTEAUtil.isCommand(targetClass)) {
+        if (KoTEAUtil.isNavigableCommand(targetClass)) {
             UClass uClass = UastContextKt.toUElement(targetClass, UClass.class);
             return uClass != null ? CommandEmissionSearcher.findEmission(uClass, scope) : List.of();
         }

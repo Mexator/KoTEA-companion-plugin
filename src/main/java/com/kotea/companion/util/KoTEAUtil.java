@@ -9,23 +9,17 @@ import org.jetbrains.uast.*;
 
 public class KoTEAUtil {
 
-    public static boolean isEvent(@Nullable PsiElement element) {
-        if (element instanceof KtClassOrObject ktClass) {
-            return EventUtil.isEventClass(ktClass);
-        }
-        return false;
-    }
-
-    public static boolean isCommand(@Nullable PsiElement element) {
+    public static boolean isNavigableCommand(@Nullable PsiElement element) {
         if (element instanceof PsiClass psiClass) {
-            return isCommandClass(psiClass);
+            return isNavigableCommandClass(psiClass);
         }
         UClass uClass = UastContextKt.toUElement(element, UClass.class);
-        return uClass != null && isCommandClass(uClass.getJavaPsi());
+        return uClass != null && isNavigableCommandClass(uClass.getJavaPsi());
     }
 
-    private static boolean isCommandClass(@Nullable PsiClass psiClass) {
+    private static boolean isNavigableCommandClass(@Nullable PsiClass psiClass) {
         if (psiClass == null) return false;
+        if (psiClass.isInterface() || psiClass.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
         return KoTEAIndexService.getInstance(psiClass.getProject()).getIndex().isCommand(psiClass);
     }
 
@@ -74,7 +68,7 @@ public class KoTEAUtil {
 
         if (uClass != null) {
             PsiClass psiClass = uClass.getJavaPsi();
-            if (isCommand(psiClass)) {
+            if (isNavigableCommand(psiClass)) {
                 return uClass.getSourcePsi();
             }
         }
