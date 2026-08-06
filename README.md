@@ -21,6 +21,10 @@ The actions are triggered by clicking gutter icons and invoking hotkeys.
 
 These actions are available for `Commands` and `Events`.
 
+## Known Issues / Limitations
+
+* Event and Command classes are detected by resolving concrete implementations of `ru.tinkoff.kotea.core.Update` and inspecting their generic type arguments. Only named `class`/`object` implementations of `Update` are found — a SAM-lambda implementation (`Update<S, E, C, N> { ... }` used as an expression) is not detected, since IntelliJ's class hierarchy search only finds named declarations.
+
 ## Installation
 
 1. Download the latest `.zip` file from the Releases page.

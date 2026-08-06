@@ -2,6 +2,7 @@ package com.kotea.companion.util;
 
 import com.intellij.psi.*;
 import com.kotea.companion.events.EventUtil;
+import com.kotea.companion.index.KoTEAIndexService;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.*;
@@ -25,11 +26,7 @@ public class KoTEAUtil {
 
     private static boolean isCommandClass(@Nullable PsiClass psiClass) {
         if (psiClass == null) return false;
-        for (PsiClass superClass : psiClass.getSupers()) {
-            String name = superClass.getName();
-            if (name != null && name.contains("Command") && !name.contains("Handler")) return true;
-        }
-        return false;
+        return KoTEAIndexService.getInstance(psiClass.getProject()).getIndex().isCommand(psiClass);
     }
 
     public static boolean isCommandsHandler(UClass uClass, PsiClass pClass) {

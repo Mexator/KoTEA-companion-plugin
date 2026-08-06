@@ -44,6 +44,7 @@
         <codeInsight.lineMarkerProvider
                 language="kotlin"
                 implementationClass="com.kotea.companion.events.EventMarkerProvider"/>
+        <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
     </extensions>
 
     <actions>
