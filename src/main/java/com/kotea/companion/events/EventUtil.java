@@ -2,6 +2,7 @@ package com.kotea.companion.events;
 
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiReference;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
@@ -14,14 +15,18 @@ import org.jetbrains.kotlin.psi.*;
 
 public class EventUtil {
 
-    public static boolean isEventClass(KtClassOrObject ktClass) {
+    /**
+     * Returns true if passed ktClass is an Event class for which this plugin provides navigation actions
+     */
+    public static boolean isNavigableEventClass(KtClassOrObject ktClass) {
         return CachedValuesManager.getCachedValue(ktClass, () ->
-                CachedValueProvider.Result.create(computeIsEventClass(ktClass), PsiModificationTracker.MODIFICATION_COUNT));
+                CachedValueProvider.Result.create(computeIsNavigableEventClass(ktClass), PsiModificationTracker.MODIFICATION_COUNT));
     }
 
-    private static boolean computeIsEventClass(KtClassOrObject ktClass) {
+    private static boolean computeIsNavigableEventClass(KtClassOrObject ktClass) {
         PsiClass lightClass = LightClassUtilsKt.toLightClass(ktClass);
         if (lightClass == null) return false;
+        if (lightClass.isInterface() || lightClass.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
         return KoTEAIndexService.getInstance(ktClass.getProject()).getIndex().isEvent(lightClass);
     }
 
@@ -67,7 +72,7 @@ public class EventUtil {
                 }
             }
         }
-        if (result != null && isEventClass(result)) {
+        if (result != null && isNavigableEventClass(result)) {
             return result;
         }
         return null;

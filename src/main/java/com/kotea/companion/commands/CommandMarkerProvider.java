@@ -52,9 +52,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
         PsiClass psiClass = uCommand.getJavaPsi();
 
-        if (psiClass.isInterface()) return;
-
-        if (KoTEAUtil.isCommand(psiClass)) {
+        if (KoTEAUtil.isNavigableCommand(psiClass)) {
 
             PsiElement identifier = psiClass.getNameIdentifier();
             if (identifier == null) return;
@@ -73,7 +71,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         PsiMethod constructor = callExpression.resolve();
         if (constructor != null && constructor.isConstructor()) {
             PsiClass constructedClass = constructor.getContainingClass();
-            if (constructedClass != null && KoTEAUtil.isCommand(constructedClass)) {
+            if (constructedClass != null && KoTEAUtil.isNavigableCommand(constructedClass)) {
                 UClass uCommand = UastContextKt.toUElement(constructedClass, UClass.class);
                 if (uCommand != null) {
                     RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
@@ -93,7 +91,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
             if (call != null) {
                 if (call.getValueArguments().contains(uElement) || call.getValueArguments().contains(parent)) {
                     PsiElement res = ref.resolve();
-                    if (res instanceof PsiClass psiClass && KoTEAUtil.isCommand(psiClass)) {
+                    if (res instanceof PsiClass psiClass && KoTEAUtil.isNavigableCommand(psiClass)) {
                         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, psiClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
                         result.add(marker);
                     }

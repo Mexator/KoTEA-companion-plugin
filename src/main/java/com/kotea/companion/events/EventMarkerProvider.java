@@ -59,7 +59,7 @@ public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
 
         KtClassOrObject targetClass = EventUtil.tryResolveToClass(element);
 
-        if (targetClass == null || !EventUtil.isEventClass(targetClass)) return;
+        if (targetClass == null || !EventUtil.isNavigableEventClass(targetClass)) return;
 
         boolean isDeclaration = element.getParent() == targetClass;
         boolean isInsideUpdateFile = element.getContainingFile().getName().contains("Update");
