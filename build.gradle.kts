@@ -1,3 +1,6 @@
+import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
+import java.util.Properties
+
 plugins {
     id("java")
     id("org.jetbrains.intellij.platform") version "2.10.2"
@@ -15,12 +18,33 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        local(file("/home/anton/.local/share/JetBrains/Toolbox/apps/android-studio/"))
+        androidStudio("2025.3.1.1")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("org.jetbrains.android")
+    }
+}
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+intellijPlatformTesting {
+    runIde {
+        register("runLocalIde") {
+            val androidStudioLocalPath = localProperties.getProperty("androidStudio.localPath")
+                ?: error(
+                    "runLocalIde requires 'androidStudio.localPath=/path/to/android-studio' " +
+                            "to be set in local.properties (pointing at your local Android Studio install)."
+                )
+            localPath = file(androidStudioLocalPath)
+            useInstaller = false
+        }
     }
 }
 
@@ -58,7 +82,7 @@ tasks {
         targetCompatibility = "21"
     }
 
-    runIde {
+    withType<RunIdeTask> {
         jvmArgs("-Xmx20g", "-Dandroid.sdk.analytics.disabled=true", "-Dstudio.ml.enabled=false")
     }
 }
