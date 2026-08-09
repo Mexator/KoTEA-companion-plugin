@@ -3,7 +3,7 @@ import java.util.Properties
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.10.2"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = "com.kotea.companion"
@@ -84,5 +84,20 @@ tasks {
 
     withType<RunIdeTask> {
         jvmArgs("-Xmx20g", "-Dandroid.sdk.analytics.disabled=true", "-Dstudio.ml.enabled=false")
+
+        // Disable the bundled Gemini/AI plugin: on startup it calls AnalyticsSettings before it's
+        // initialized, which crashes runLocalIde with "call to AnalyticsSettings before initialization".
+        // "url-assistant" depends directly on it, so it must be disabled too, otherwise the IDE
+        // logs it as a plugin that failed to load due to a missing/disabled dependency.
+        doFirst {
+            val disabledPluginsFile = sandboxConfigDirectory.get().file("disabled_plugins.txt").asFile
+            disabledPluginsFile.parentFile.mkdirs()
+            disabledPluginsFile.writeText(
+                """
+                com.google.tools.ij.aiplugin
+                com.google.urlassistant
+                """.trimIndent() + "\n"
+            )
+        }
     }
 }
