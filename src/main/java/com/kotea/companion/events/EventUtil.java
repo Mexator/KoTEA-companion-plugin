@@ -20,7 +20,9 @@ public class EventUtil {
      */
     public static boolean isNavigableEventClass(KtClassOrObject ktClass) {
         return CachedValuesManager.getCachedValue(ktClass, () ->
-                CachedValueProvider.Result.create(computeIsNavigableEventClass(ktClass), PsiModificationTracker.MODIFICATION_COUNT));
+                CachedValueProvider.Result.create(computeIsNavigableEventClass(ktClass),
+                        PsiModificationTracker.MODIFICATION_COUNT,
+                        KoTEAIndexService.getInstance(ktClass.getProject()).getModificationTracker()));
     }
 
     private static boolean computeIsNavigableEventClass(KtClassOrObject ktClass) {

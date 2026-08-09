@@ -18,9 +18,9 @@ import com.intellij.psi.search.ProjectScope;
 import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.TypeConversionUtil;
-import com.intellij.util.indexing.FileBasedIndex;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.ScopeBuilder;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
 import org.jetbrains.kotlin.asJava.classes.KtLightClass;
@@ -28,15 +28,18 @@ import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtReferenceExpression;
 import org.jetbrains.kotlin.psi.KtSuperTypeListEntry;
+import org.jetbrains.kotlin.psi.KtTreeVisitorVoid;
 import org.jetbrains.kotlin.psi.KtTypeElement;
 import org.jetbrains.kotlin.psi.KtTypeProjection;
 import org.jetbrains.kotlin.psi.KtTypeReference;
 import org.jetbrains.kotlin.psi.KtUserType;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class KoTEAIndexComputer {
@@ -49,121 +52,151 @@ public final class KoTEAIndexComputer {
     private KoTEAIndexComputer() {
     }
 
-    public static KoTEAIndex compute(Project project) {
-        GlobalSearchScope allScope = GlobalSearchScope.allScope(project);
-        PsiClass updateClass = JavaPsiFacade.getInstance(project).findClass(UPDATE_FQN, allScope);
-        if (updateClass == null) return KoTEAIndex.EMPTY;
+    /**
+     * Full project-wide scan: every project class implementing {@code Update}, grouped by the file
+     * that declares it. Production scope only - {@code JavaClassInheritorsSearcher} traverses with
+     * {@code allScope} internally regardless of the requested scope and only *filters* by it, so
+     * nothing is missed by passing the narrower one.
+     * <p>
+     * Also seeds the search from any library-provided intermediate base (e.g. KoTEA's
+     * {@code DslUpdate}), found via a one-off library-scope inheritor search and run
+     * unconditionally: Kotlin's {@code DirectClassInheritorsSearch} executor looks up literal
+     * supertype names in an index restricted to <i>project</i> source files only, so on a project
+     * that reaches {@code updateClass} only through such an intermediate base and never references
+     * {@code updateClass} directly - the usual case per {@code CONTEXT.md} - a search seeded from
+     * {@code updateClass} alone can never take its first hop, since the intermediate base's own
+     * declaration lives in the library, not a project source file.
+     */
+    public static Map<VirtualFile, List<UpdateRecord>> computeAll(Project project) {
+        PsiClass updateClass = findUpdateClass(project);
+        if (updateClass == null) return Map.of();
 
-        Set<PsiClass> candidates = discoverCandidates(project, updateClass);
-
-        long leafFilterStart = PerfLog.start();
-        Set<PsiClass> leaves = leafFilter(candidates);
-        PerfLog.logElapsed(LOG, "KoTEA leaf filter reduced " + candidates.size() + " candidates to "
-                + leaves.size() + " leaves", leafFilterStart);
-
-        Set<PsiClass> rootEvents = new HashSet<>();
-        Set<PsiClass> rootCommands = new HashSet<>();
-
-        // Update params: <State, Event, Command, News>
         PsiTypeParameter[] params = updateClass.getTypeParameters();
-        if (params.length < 3) return KoTEAIndex.EMPTY;
+        if (params.length < 3) return Map.of();
 
-        long resolutionStart = PerfLog.start();
-        for (PsiClass leaf : leaves) {
-            PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(updateClass, leaf, PsiSubstitutor.EMPTY);
-            PsiClass eventClass = resolveClassArg(substitutor.substitute(params[1]));
-            PsiClass commandClass = resolveClassArg(substitutor.substitute(params[2]));
+        GlobalSearchScope productionScope = ScopeBuilder.getProductionScope(project);
 
-            // kotlinc cannot encode a JVM generic signature that instantiates a type parameter with
-            // `Nothing` (it has no compiled class), so it drops the leaf's whole generic supertype
-            // signature and the light-class substitutor above sees a raw, argument-less type. That
-            // happens e.g. for `Update<State, Event, Command, Nothing>` when a feature has no News.
-            // Fall back to reading the type arguments straight out of Kotlin source, which has no
-            // such limitation.
-            if (eventClass == null || commandClass == null) {
-                PsiClass[] fromSource = resolveEventAndCommandFromKotlinSource(leaf, updateClass);
-                if (eventClass == null) eventClass = fromSource[0];
-                if (commandClass == null) commandClass = fromSource[1];
-            }
+        long searchStart = PerfLog.start();
+        Set<PsiClass> hits = new HashSet<>(ClassInheritorsSearch.search(updateClass, productionScope, true).findAll());
 
-            if (eventClass != null) rootEvents.add(eventClass);
-            if (commandClass != null) rootCommands.add(commandClass);
+        GlobalSearchScope librariesScope = ProjectScope.getLibrariesScope(project);
+        for (PsiClass libraryBase : ClassInheritorsSearch.search(updateClass, librariesScope, true).findAll()) {
+            hits.addAll(ClassInheritorsSearch.search(libraryBase, productionScope, true).findAll());
         }
-        PerfLog.logElapsed(LOG, "KoTEA generic-argument resolution processed " + leaves.size()
-                + " leaves -> " + rootEvents.size() + " event roots, " + rootCommands.size()
-                + " command roots", resolutionStart);
+        PerfLog.logElapsed(LOG, "KoTEA full ClassInheritorsSearch found " + hits.size() + " candidates", searchStart);
 
-        return new KoTEAIndex(rootEvents, rootCommands);
+        Map<VirtualFile, List<UpdateRecord>> recordsByFile = new HashMap<>();
+        for (PsiClass psiClass : hits) {
+            PsiFile containingFile = psiClass.getContainingFile();
+            VirtualFile virtualFile = containingFile != null ? containingFile.getVirtualFile() : null;
+            if (virtualFile == null) continue;
+            recordsByFile.computeIfAbsent(virtualFile, f -> new ArrayList<>())
+                    .add(buildRecord(psiClass, updateClass, params));
+        }
+        return recordsByFile;
     }
 
     /**
-     * Bounded fixed-point walk over {@link KoTEASuperTypeNameIndex}: starting from {@code Update}'s
-     * simple name plus any library-provided intermediate bases (e.g. {@code DslUpdate}, found via a
-     * one-off library-scope inheritor search, run unconditionally since a project may only ever
-     * literally reference the intermediate base and never {@code Update} itself), repeatedly finds
-     * project classes whose literal, syntactic supertype list mentions a name discovered so far, and
-     * queues each such class's own name for the next round. This discovers the small set of project
-     * classes related to the {@code Update} hierarchy in time proportional to that set, instead of a
-     * project-wide {@code ClassInheritorsSearch}. Test sources are excluded, matching the
-     * {@link ScopeBuilder} convention used elsewhere in this plugin.
-     * <p>
-     * Because names are matched as literal text with no cross-file resolution, a candidate is
-     * verified against {@code updateClass}'s real, resolved supertype chain (a cheap check bounded by
-     * that one candidate's inheritance depth, not the project) before it's kept or allowed to
-     * propagate the walk further - this both keeps unrelated same-named classes from expanding the
-     * search and guarantees every leaf handed to the generic-argument resolution below is a genuine
-     * inheritor. One inherent gap remains: a supertype referenced only through a typealias or an
-     * aliased import isn't discovered, since its literal token never matches a seed name.
+     * The incremental path: re-derives the {@link UpdateRecord}s declared by a single file from its
+     * PSI directly - no literal-name matching, so typealiases and aliased imports resolve correctly.
      */
-    private static Set<PsiClass> discoverCandidates(Project project, PsiClass updateClass) {
-        Set<String> seedNames = new HashSet<>();
-        String updateSimpleName = updateClass.getName();
-        if (updateSimpleName != null) seedNames.add(updateSimpleName);
+    public static List<UpdateRecord> computeForFile(Project project, VirtualFile file) {
+        PsiClass updateClass = findUpdateClass(project);
+        if (updateClass == null) return List.of();
 
-        long librarySeedStart = PerfLog.start();
-        GlobalSearchScope librariesScope = ProjectScope.getLibrariesScope(project);
-        for (PsiClass libraryBase : ClassInheritorsSearch.search(updateClass, librariesScope, true).findAll()) {
-            String name = libraryBase.getName();
-            if (name != null) seedNames.add(name);
-        }
-        PerfLog.logElapsed(LOG, "KoTEA library-scope Update-base seed search found " + seedNames.size()
-                + " seed names", librarySeedStart);
+        PsiTypeParameter[] params = updateClass.getTypeParameters();
+        if (params.length < 3) return List.of();
 
-        GlobalSearchScope productionScope = ScopeBuilder.getProductionScope(project);
-        PsiManager psiManager = PsiManager.getInstance(project);
-        FileBasedIndex fileBasedIndex = FileBasedIndex.getInstance();
+        PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+        if (!(psiFile instanceof KtFile ktFile)) return List.of();
 
-        Set<PsiClass> candidates = new HashSet<>();
-        Set<String> visitedNames = new HashSet<>(seedNames);
-        Set<String> frontier = seedNames;
+        List<UpdateRecord> records = new ArrayList<>();
+        ktFile.accept(new KtTreeVisitorVoid() {
+            @Override
+            public void visitClassOrObject(@NotNull KtClassOrObject classOrObject) {
+                super.visitClassOrObject(classOrObject);
+                if (classOrObject.getSuperTypeListEntries().isEmpty()) return;
 
-        long bfsStart = PerfLog.start();
-        while (!frontier.isEmpty()) {
-            Set<VirtualFile> files = new HashSet<>();
-            for (String name : frontier) {
-                files.addAll(fileBasedIndex.getContainingFiles(KoTEASuperTypeNameIndex.NAME, name, productionScope));
+                PsiClass lightClass = LightClassUtilsKt.toLightClass(classOrObject);
+                if (lightClass == null || !InheritanceUtil.isInheritorOrSelf(lightClass, updateClass, true)) return;
+
+                records.add(buildRecord(lightClass, updateClass, params));
             }
+        });
+        return records;
+    }
 
-            Set<String> nextFrontier = new HashSet<>();
-            for (VirtualFile virtualFile : files) {
-                PsiFile psiFile = psiManager.findFile(virtualFile);
-                if (!(psiFile instanceof KtFile ktFile)) continue;
+    /**
+     * Pure string work, no PSI: the Feature Update filter (a record's {@code fqn} appears in no
+     * other record's {@code updateAncestorFqns} - records with a null {@code fqn} always qualify,
+     * since an anonymous {@code object : Update<...> {}} can't be anyone's supertype) plus the union
+     * of the surviving records' Event/Command Root FQNs.
+     */
+    public static KoTEAIndex derive(Collection<List<UpdateRecord>> recordsByFile) {
+        List<UpdateRecord> all = new ArrayList<>();
+        for (List<UpdateRecord> records : recordsByFile) all.addAll(records);
 
-                for (KtClassOrObject classOrObject : KoTEASuperTypeNameIndex.classesWithLiteralSuperType(ktFile, frontier)) {
-                    PsiClass psiClass = LightClassUtilsKt.toLightClass(classOrObject);
-                    if (psiClass == null || !InheritanceUtil.isInheritorOrSelf(psiClass, updateClass, true)) continue;
+        Set<String> updateAncestorFqns = new HashSet<>();
+        for (UpdateRecord record : all) updateAncestorFqns.addAll(record.updateAncestorFqns());
 
-                    candidates.add(psiClass);
-                    String name = classOrObject.getName();
-                    if (name != null && visitedNames.add(name)) nextFrontier.add(name);
-                }
-            }
-            frontier = nextFrontier;
+        Set<String> eventRootFqns = new HashSet<>();
+        Set<String> commandRootFqns = new HashSet<>();
+        for (UpdateRecord record : all) {
+            boolean isFeatureUpdate = record.fqn() == null || !updateAncestorFqns.contains(record.fqn());
+            if (!isFeatureUpdate) continue;
+
+            if (record.eventRootFqn() != null) eventRootFqns.add(record.eventRootFqn());
+            if (record.commandRootFqn() != null) commandRootFqns.add(record.commandRootFqn());
         }
-        PerfLog.logElapsed(LOG, "KoTEA candidate discovery (BFS) found " + candidates.size()
-                + " candidates", bfsStart);
+        return new KoTEAIndex(eventRootFqns, commandRootFqns);
+    }
 
-        return candidates;
+    @Nullable
+    private static PsiClass findUpdateClass(Project project) {
+        GlobalSearchScope allScope = GlobalSearchScope.allScope(project);
+        return JavaPsiFacade.getInstance(project).findClass(UPDATE_FQN, allScope);
+    }
+
+    private static UpdateRecord buildRecord(PsiClass psiClass, PsiClass updateClass, PsiTypeParameter[] params) {
+        // Update params: <State, Event, Command, News>
+        PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(updateClass, psiClass, PsiSubstitutor.EMPTY);
+        PsiClass eventClass = resolveClassArg(substitutor.substitute(params[1]));
+        PsiClass commandClass = resolveClassArg(substitutor.substitute(params[2]));
+
+        // kotlinc cannot encode a JVM generic signature that instantiates a type parameter with
+        // `Nothing` (it has no compiled class), so it drops the class's whole generic supertype
+        // signature and the light-class substitutor above sees a raw, argument-less type. That
+        // happens e.g. for `Update<State, Event, Command, Nothing>` when a feature has no News.
+        // Fall back to reading the type arguments straight out of Kotlin source, which has no
+        // such limitation.
+        if (eventClass == null || commandClass == null) {
+            PsiClass[] fromSource = resolveEventAndCommandFromKotlinSource(psiClass, updateClass);
+            if (eventClass == null) eventClass = fromSource[0];
+            if (commandClass == null) commandClass = fromSource[1];
+        }
+
+        return new UpdateRecord(
+                psiClass.getQualifiedName(),
+                collectUpdateAncestorFqns(psiClass, updateClass),
+                eventClass != null ? eventClass.getQualifiedName() : null,
+                commandClass != null ? commandClass.getQualifiedName() : null);
+    }
+
+    /**
+     * FQNs of {@code psiClass}'s supers (excluding itself and {@code updateClass}) that are
+     * themselves {@code Update} implementations - what the Feature Update filter in {@link #derive}
+     * uses to tell a most-derived class from an intermediate base.
+     */
+    private static Set<String> collectUpdateAncestorFqns(PsiClass psiClass, PsiClass updateClass) {
+        Set<String> ancestorFqns = new HashSet<>();
+        InheritanceUtil.processSupers(psiClass, false, ancestor -> {
+            String fqn = ancestor.getQualifiedName();
+            if (fqn != null && !UPDATE_FQN.equals(fqn) && InheritanceUtil.isInheritorOrSelf(ancestor, updateClass, true)) {
+                ancestorFqns.add(fqn);
+            }
+            return true;
+        });
+        return ancestorFqns;
     }
 
     @Nullable
@@ -220,22 +253,5 @@ public final class KoTEAIndexComputer {
         PsiElement nav = resolved.getNavigationElement();
         if (nav instanceof KtClassOrObject cls) return LightClassUtilsKt.toLightClass(cls);
         return resolved instanceof PsiClass psiClass ? psiClass : null;
-    }
-
-    private static Set<PsiClass> leafFilter(Set<PsiClass> inheritorSet) {
-        Set<PsiClass> notLeaf = new HashSet<>();
-        for (PsiClass y : inheritorSet) {
-            Set<PsiClass> visited = new HashSet<>();
-            Deque<PsiClass> stack = new ArrayDeque<>(List.of(y.getSupers()));
-            while (!stack.isEmpty()) {
-                PsiClass ancestor = stack.pop();
-                if (!visited.add(ancestor)) continue;
-                if (inheritorSet.contains(ancestor)) notLeaf.add(ancestor);
-                stack.addAll(List.of(ancestor.getSupers()));
-            }
-        }
-        Set<PsiClass> leaves = new HashSet<>(inheritorSet);
-        leaves.removeAll(notLeaf);
-        return leaves;
     }
 }

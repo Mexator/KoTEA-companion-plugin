@@ -1,6 +1,5 @@
 package com.kotea.companion.startup;
 
-import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -25,8 +24,8 @@ public class KoTEAStartupActivity implements ProjectActivity {
                     @Override
                     public void run(@NotNull ProgressIndicator indicator) {
                         long start = PerfLog.start();
-                        ReadAction.run(() -> KoTEAIndexService.getInstance(project).getIndex());
-                        PerfLog.logElapsed(LOG, "KoTEA startup indexing", start);
+                        KoTEAIndexService.getInstance(project).requestFullRebuild();
+                        PerfLog.logElapsed(LOG, "KoTEA startup indexing requested", start);
                     }
                 }));
         return Unit.INSTANCE;
