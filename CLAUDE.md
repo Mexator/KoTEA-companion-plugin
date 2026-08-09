@@ -57,3 +57,17 @@ Heavy PSI searches run inside `ReadAction.nonBlocking(...).inSmartMode(project).
 - **UAST** for language-agnostic syntax tree access (works across Java and Kotlin)
 - **PSI** for Kotlin-specific analysis where UAST is insufficient
 - Java 21, Gradle Kotlin DSL (`build.gradle.kts`)
+
+## Viewing platform sources
+
+Prefer reading platform sources with `idea` mcp rather than decompiling or unpacking jars.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked as local markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
