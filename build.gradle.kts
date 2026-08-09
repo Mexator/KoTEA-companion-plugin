@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.2.0-PRE"
+version = "1.2.1-PRE"
 
 repositories {
     mavenCentral()
@@ -61,7 +61,7 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.2.0-PRE</b>
+                <li><b>1.2.1-PRE</b>
                     <ul>
                         <li>Rework Events and Commands discovery via Update classes</li>
                     </ul>
