@@ -10,6 +10,7 @@ import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.util.indexing.FileBasedIndex;
+import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 
 @Service(Service.Level.PROJECT)
@@ -29,10 +30,9 @@ public final class KoTEAIndexService {
         ModificationTracker superTypeIndexTracker = () ->
                 FileBasedIndex.getInstance().getIndexModificationStamp(KoTEASuperTypeNameIndex.NAME, project);
         this.cache = CachedValuesManager.getManager(project).createCachedValue(() -> {
-            long start = System.nanoTime();
+            long start = PerfLog.start();
             KoTEAIndex index = KoTEAIndexComputer.compute(project);
-            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-            LOG.info("KoTEA index rebuilt in " + elapsedMs + " ms");
+            PerfLog.logElapsed(LOG, "KoTEA index rebuild", start);
             return CachedValueProvider.Result.create(
                     index, superTypeIndexTracker, ProjectRootModificationTracker.getInstance(project));
         }, false);

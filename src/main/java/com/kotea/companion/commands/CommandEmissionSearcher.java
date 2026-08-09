@@ -1,5 +1,6 @@
 package com.kotea.companion.commands;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
@@ -9,6 +10,7 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
+import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
 
@@ -18,6 +20,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CommandEmissionSearcher {
+
+    private static final Logger LOG = Logger.getInstance(CommandEmissionSearcher.class);
 
     public static List<PsiElement> findEmission(@NotNull UClass uClass, GlobalSearchScope scope) {
         Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(uClass.getJavaPsi(),
@@ -37,6 +41,7 @@ public class CommandEmissionSearcher {
             }
         };
 
+        long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
         PsiClass psiClass = uClass.getJavaPsi();
 
@@ -66,6 +71,8 @@ public class CommandEmissionSearcher {
             return true;
         });
 
+        PerfLog.logElapsed(LOG, "CommandEmissionSearcher search for " + uClass.getName() + " found "
+                + targets.size() + " results", start);
         return targets;
     }
 }

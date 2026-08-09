@@ -1,5 +1,6 @@
 package com.kotea.companion.commands;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
@@ -9,6 +10,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
 
@@ -16,6 +18,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CommandProcessingSearcher {
+
+    private static final Logger LOG = Logger.getInstance(CommandProcessingSearcher.class);
 
     public static List<PsiElement> findProcessing(@NotNull UClass uClass, GlobalSearchScope scope) {
         Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(uClass.getJavaPsi(),
@@ -36,6 +40,7 @@ public class CommandProcessingSearcher {
             }
         };
 
+        long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
         PsiClass classCommand = uClass.getJavaPsi();
 
@@ -55,6 +60,8 @@ public class CommandProcessingSearcher {
             return true;
         });
 
+        PerfLog.logElapsed(LOG, "CommandProcessingSearcher search for " + uClass.getName() + " found "
+                + targets.size() + " results", start);
         return targets;
     }
 }

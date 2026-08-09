@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -17,6 +18,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
@@ -24,6 +26,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 public abstract class BaseGoToAction extends AnAction {
+
+    private static final Logger LOG = Logger.getInstance(BaseGoToAction.class);
 
     protected abstract List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope);
 
@@ -60,7 +64,9 @@ public abstract class BaseGoToAction extends AnAction {
             public void run(@NotNull ProgressIndicator indicator) {
                 indicator.setIndeterminate(true);
                 try {
+                    long start = PerfLog.start();
                     List<PsiElement> targets = ReadAction.compute(() -> findTargets(targetClass, scope));
+                    PerfLog.logElapsed(LOG, getOperation() + " search", start);
                     if (indicator.isCanceled()) return;
 
                     ApplicationManager.getApplication().invokeLater(() -> {

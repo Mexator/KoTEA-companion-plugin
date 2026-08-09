@@ -1,5 +1,6 @@
 package com.kotea.companion.index;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
@@ -18,6 +19,7 @@ import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.util.indexing.FileBasedIndex;
+import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
@@ -39,6 +41,8 @@ import java.util.Set;
 
 public final class KoTEAIndexComputer {
 
+    private static final Logger LOG = Logger.getInstance(KoTEAIndexComputer.class);
+
     // https://opensource.tbank.ru/mobile-tech/KoTEA/-/blob/main/core/src/commonMain/kotlin/ru/tinkoff/kotea/core/Update.kt
     private static final String UPDATE_FQN = "ru.tinkoff.kotea.core.Update";
 
@@ -51,7 +55,11 @@ public final class KoTEAIndexComputer {
         if (updateClass == null) return KoTEAIndex.EMPTY;
 
         Set<PsiClass> candidates = discoverCandidates(project, updateClass);
+
+        long leafFilterStart = PerfLog.start();
         Set<PsiClass> leaves = leafFilter(candidates);
+        PerfLog.logElapsed(LOG, "KoTEA leaf filter reduced " + candidates.size() + " candidates to "
+                + leaves.size() + " leaves", leafFilterStart);
 
         Set<PsiClass> rootEvents = new HashSet<>();
         Set<PsiClass> rootCommands = new HashSet<>();
@@ -60,6 +68,7 @@ public final class KoTEAIndexComputer {
         PsiTypeParameter[] params = updateClass.getTypeParameters();
         if (params.length < 3) return KoTEAIndex.EMPTY;
 
+        long resolutionStart = PerfLog.start();
         for (PsiClass leaf : leaves) {
             PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(updateClass, leaf, PsiSubstitutor.EMPTY);
             PsiClass eventClass = resolveClassArg(substitutor.substitute(params[1]));
@@ -80,6 +89,9 @@ public final class KoTEAIndexComputer {
             if (eventClass != null) rootEvents.add(eventClass);
             if (commandClass != null) rootCommands.add(commandClass);
         }
+        PerfLog.logElapsed(LOG, "KoTEA generic-argument resolution processed " + leaves.size()
+                + " leaves -> " + rootEvents.size() + " event roots, " + rootCommands.size()
+                + " command roots", resolutionStart);
 
         return new KoTEAIndex(rootEvents, rootCommands);
     }
@@ -108,11 +120,14 @@ public final class KoTEAIndexComputer {
         String updateSimpleName = updateClass.getName();
         if (updateSimpleName != null) seedNames.add(updateSimpleName);
 
+        long librarySeedStart = PerfLog.start();
         GlobalSearchScope librariesScope = ProjectScope.getLibrariesScope(project);
         for (PsiClass libraryBase : ClassInheritorsSearch.search(updateClass, librariesScope, true).findAll()) {
             String name = libraryBase.getName();
             if (name != null) seedNames.add(name);
         }
+        PerfLog.logElapsed(LOG, "KoTEA library-scope Update-base seed search found " + seedNames.size()
+                + " seed names", librarySeedStart);
 
         GlobalSearchScope productionScope = ScopeBuilder.getProductionScope(project);
         PsiManager psiManager = PsiManager.getInstance(project);
@@ -122,6 +137,7 @@ public final class KoTEAIndexComputer {
         Set<String> visitedNames = new HashSet<>(seedNames);
         Set<String> frontier = seedNames;
 
+        long bfsStart = PerfLog.start();
         while (!frontier.isEmpty()) {
             Set<VirtualFile> files = new HashSet<>();
             for (String name : frontier) {
@@ -144,6 +160,8 @@ public final class KoTEAIndexComputer {
             }
             frontier = nextFrontier;
         }
+        PerfLog.logElapsed(LOG, "KoTEA candidate discovery (BFS) found " + candidates.size()
+                + " candidates", bfsStart);
 
         return candidates;
     }

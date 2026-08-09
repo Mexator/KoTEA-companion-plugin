@@ -1,11 +1,13 @@
 package com.kotea.companion.commands;
 
 import com.intellij.codeInsight.daemon.GutterIconNavigationHandler;
+import com.intellij.codeInsight.daemon.LineMarkerInfo;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
 import com.intellij.codeInsight.daemon.RelatedItemLineMarkerProvider;
 import com.intellij.codeInsight.navigation.PsiTargetNavigator;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.markup.GutterIconRenderer;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -21,6 +23,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
@@ -35,14 +38,35 @@ import java.util.function.BiFunction;
 
 public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
+    private static final Logger LOG = Logger.getInstance(CommandMarkerProvider.class);
+
+    @Override
+    public void collectSlowLineMarkers(@NotNull List<? extends PsiElement> elements,
+                                        @NotNull Collection<? super LineMarkerInfo<?>> result) {
+        long start = PerfLog.start();
+        super.collectSlowLineMarkers(elements, result);
+        PerfLog.warnIfSlow(LOG, "CommandMarkerProvider marker collection over " + elements.size()
+                + " elements", start, 100);
+    }
+
     @Override
     protected void collectNavigationMarkers(@NotNull PsiElement element,
                                             @NotNull Collection<? super RelatedItemLineMarkerInfo<?>> result) {
+        long start = PerfLog.start();
 
         addClassMarker(element, result);
+        long classAdded = PerfLog.start();
         addConstructorCallMarker(element, result);
+        long constructorAdded = PerfLog.start();
         addObjectMarker(element, result);
+        long objectAdded = PerfLog.start();
         addInHandle(element, result);
+        PerfLog.warnIfSlow(LOG, "CommandMarkerProvider marker collection for " + element + "is slow; " +
+                "class: " + (classAdded - start) + "ms, " +
+                "constructor: " + (constructorAdded - classAdded)/1_000_000 + "ms, " +
+                "object: " + (objectAdded - constructorAdded)/1_000_000 + "ms, " +
+                "inHandle: " + (PerfLog.start() - objectAdded)/1_000_000 + "ms",
+                start, 10);
     }
 
     private void addClassMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
@@ -140,14 +164,20 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                     try {
                         indicator.setText("Searching in module...");
                         UClass uClass = UastContextKt.toUElement(targetCommand, UClass.class);
+                        long moduleSearchStart = PerfLog.start();
                         List<PsiElement> targets = ReadAction.compute(() ->
                                 searchFunc.apply(uClass, ScopeBuilder.getModuleScope(element)));
+                        PerfLog.logElapsed(LOG, "CommandMarkerProvider module-scope " + title + " search",
+                                moduleSearchStart);
 
                         String scope = "module";
                         if ((targets == null || targets.isEmpty()) && !indicator.isCanceled()) {
                             indicator.setText("Searching in project...");
+                            long projectSearchStart = PerfLog.start();
                             targets = ReadAction.compute(() ->
                                     searchFunc.apply(uClass, ScopeBuilder.getProductionScope(element)));
+                            PerfLog.logElapsed(LOG, "CommandMarkerProvider project-scope " + title + " search",
+                                    projectSearchStart);
                             scope = "project";
                         }
 
