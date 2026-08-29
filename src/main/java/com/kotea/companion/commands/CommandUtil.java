@@ -1,5 +1,6 @@
 package com.kotea.companion.commands;
 
+import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.*;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
@@ -20,6 +21,7 @@ public class CommandUtil {
 
     private static boolean isNavigableCommandClass(@Nullable PsiClass psiClass) {
         if (psiClass == null) return false;
+        if (DumbService.getInstance(psiClass.getProject()).isDumb()) return false;
         return CachedValuesManager.getCachedValue(psiClass, () ->
                 CachedValueProvider.Result.create(computeIsNavigableCommandClass(psiClass),
                         PsiModificationTracker.MODIFICATION_COUNT,

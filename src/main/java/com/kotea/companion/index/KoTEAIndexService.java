@@ -104,11 +104,7 @@ public final class KoTEAIndexService implements Disposable {
         return project.getService(KoTEAIndexService.class);
     }
 
-    /**
-     * Always non-blocking: the volatile snapshot, possibly stale by one recompute cycle.
-     */
     public KoTEARootsIndex getIndex() {
-        if (DumbService.getInstance(project).isDumb()) return KoTEARootsIndex.EMPTY;
         return snapshot;
     }
 

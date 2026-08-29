@@ -1,5 +1,6 @@
 package com.kotea.companion.events;
 
+import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiModifier;
@@ -19,6 +20,7 @@ public class EventUtil {
      * Returns true if passed ktClass is an Event class for which this plugin provides navigation actions
      */
     public static boolean isNavigableEventClass(KtClassOrObject ktClass) {
+        if (DumbService.getInstance(ktClass.getProject()).isDumb()) return false;
         return CachedValuesManager.getCachedValue(ktClass, () ->
                 CachedValueProvider.Result.create(computeIsNavigableEventClass(ktClass),
                         PsiModificationTracker.MODIFICATION_COUNT,
