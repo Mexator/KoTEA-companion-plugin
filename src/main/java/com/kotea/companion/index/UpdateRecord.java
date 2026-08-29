@@ -18,17 +18,4 @@ public record UpdateRecord(
     public UpdateRecord {
         updateAncestorFqns = Set.copyOf(updateAncestorFqns);
     }
-
-    /**
-     * The part of this record that determines Update-hierarchy membership (Feature Update status
-     * of this class and any others), as opposed to the Event/Command Root fields, which can change
-     * without affecting membership. Used to detect whether a rescanned file requires a full
-     * {@code computeAll} instead of an exact patch of {@code recordsByFile}.
-     */
-    public MembershipKey membershipKey() {
-        return new MembershipKey(fqn, updateAncestorFqns);
-    }
-
-    public record MembershipKey(@Nullable String fqn, Set<String> updateAncestorFqns) {
-    }
 }

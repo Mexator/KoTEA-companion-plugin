@@ -5,7 +5,7 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.commands.CommandProcessingSearcher;
 import com.kotea.companion.events.EventProcessingSearcher;
 import com.kotea.companion.events.EventUtil;
-import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.commands.CommandUtil;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.UClass;
 import org.jetbrains.uast.UastContextKt;
@@ -22,7 +22,7 @@ public class GoToProcessingAction extends BaseGoToAction {
             return EventProcessingSearcher.findProcessing(targetClass, scope);
         }
 
-        if (KoTEAUtil.isNavigableCommand(targetClass)) {
+        if (CommandUtil.isNavigableCommand(targetClass)) {
             UClass uClass = UastContextKt.toUElement(targetClass, UClass.class);
             return uClass != null ? CommandProcessingSearcher.findProcessing(uClass, scope) : List.of();
         }

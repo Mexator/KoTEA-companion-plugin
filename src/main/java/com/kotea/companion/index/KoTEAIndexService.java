@@ -36,23 +36,16 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
- * Stateful, event-driven replacement for the old {@code CachedValue}: {@link #getIndex()} always
- * returns the latest published {@link KoTEAIndex} with zero blocking work, while PSI/VFS/roots
- * listeners mark files dirty and a coalesced background {@link com.intellij.openapi.application.NonBlockingReadAction}
- * keeps {@link #recordsByFile} - and therefore the published snapshot - up to date.
+ * Owns up-to-date {@link KoTEARootsIndex} snapshot, and rebuilds it in the background.
  */
 @Service(Service.Level.PROJECT)
 public final class KoTEAIndexService implements Disposable {
 
     private static final Logger LOG = Logger.getInstance(KoTEAIndexService.class);
 
-    /** Above this many dirty files in one batch (e.g. a VCS checkout), a full rebuild is cheaper
-     * than that many individual per-file scans. */
-    private static final int FULL_REBUILD_THRESHOLD = 50;
-
     private final Project project;
 
-    private volatile KoTEAIndex snapshot = KoTEAIndex.EMPTY;
+    private volatile KoTEARootsIndex snapshot = KoTEARootsIndex.EMPTY;
     private volatile boolean initialized = false;
     private volatile boolean fullRebuildRequested = false;
     private final AtomicLong changeCounter = new AtomicLong();
@@ -111,9 +104,11 @@ public final class KoTEAIndexService implements Disposable {
         return project.getService(KoTEAIndexService.class);
     }
 
-    /** Always non-blocking: the volatile snapshot, possibly stale by one recompute cycle. */
-    public KoTEAIndex getIndex() {
-        if (DumbService.getInstance(project).isDumb()) return KoTEAIndex.EMPTY;
+    /**
+     * Always non-blocking: the volatile snapshot, possibly stale by one recompute cycle.
+     */
+    public KoTEARootsIndex getIndex() {
+        if (DumbService.getInstance(project).isDumb()) return KoTEARootsIndex.EMPTY;
         return snapshot;
     }
 
@@ -158,18 +153,16 @@ public final class KoTEAIndexService implements Disposable {
         Set<VirtualFile> dirtySnapshot = Set.copyOf(dirtyFiles);
         Set<VirtualFile> deletedSnapshot = Set.copyOf(deletedFiles);
 
-        boolean doFullRebuild = fullRebuildRequested || !initialized || dirtySnapshot.size() > FULL_REBUILD_THRESHOLD;
+        boolean doFullRebuild = fullRebuildRequested || !initialized;
 
-        // Membership check: patch every dirty file locally, but if any file's Feature-Update
-        // membership signature changed (an Update implementation was added/removed/renamed/
-        // re-parented), that can flip the leaf status of subclasses in files we didn't scan, so
-        // fall back to a full rebuild in the same pass instead of leaving a stale patch.
+        // Trigger a full rebuild if any file's Feature-Update signature changed
+        // (an Update implementation was added/removed/renamed/re-parented).
         Map<VirtualFile, List<UpdateRecord>> patched = null;
         if (!doFullRebuild) {
             patched = new HashMap<>();
             for (VirtualFile file : dirtySnapshot) {
                 List<UpdateRecord> newRecords = KoTEAIndexComputer.computeForFile(project, file);
-                if (!sameMembership(recordsByFile.get(file), newRecords)) {
+                if (!sameUpdateHierarchy(recordsByFile.getOrDefault(file, List.of()), newRecords)) {
                     doFullRebuild = true;
                     break;
                 }
@@ -205,7 +198,7 @@ public final class KoTEAIndexService implements Disposable {
             path = "incremental (" + dirtySnapshot.size() + " files)";
         }
 
-        KoTEAIndex newIndex = KoTEAIndexComputer.derive(recordsByFile.values());
+        KoTEARootsIndex newIndex = KoTEAIndexComputer.derive(recordsByFile.values());
         boolean changed = !newIndex.equals(snapshot);
         if (changed) {
             snapshot = newIndex;
@@ -219,7 +212,9 @@ public final class KoTEAIndexService implements Disposable {
 
         if (changed) {
             ApplicationManager.getApplication().invokeLater(
-                    () -> DaemonCodeAnalyzer.getInstance(project).restart(), project.getDisposed());
+                    () -> DaemonCodeAnalyzer.getInstance(project).restart("KoTEA index changed"),
+                    project.getDisposed()
+            );
         }
 
         // Only clear what this run consumed if nothing new arrived while we were computing -
@@ -232,10 +227,19 @@ public final class KoTEAIndexService implements Disposable {
         }
     }
 
-    private static boolean sameMembership(@Nullable List<UpdateRecord> oldRecords, List<UpdateRecord> newRecords) {
-        Set<UpdateRecord.MembershipKey> oldKeys = oldRecords == null ? Set.of() :
-                oldRecords.stream().map(UpdateRecord::membershipKey).collect(Collectors.toSet());
-        Set<UpdateRecord.MembershipKey> newKeys = newRecords.stream().map(UpdateRecord::membershipKey).collect(Collectors.toSet());
+    /**
+     * @return true if oldRecords and newRecords have the same Updates. Checks if Update FQNs did not change as well
+     * as their ancestors.
+     */
+    private static boolean sameUpdateHierarchy(List<UpdateRecord> oldRecords, List<UpdateRecord> newRecords) {
+        Set<UpdateHierarchy> oldKeys = oldRecords.stream().map(UpdateHierarchy::new).collect(Collectors.toSet());
+        Set<UpdateHierarchy> newKeys = newRecords.stream().map(UpdateHierarchy::new).collect(Collectors.toSet());
         return oldKeys.equals(newKeys);
+    }
+
+    private record UpdateHierarchy(@Nullable String fqn, Set<String> updateAncestorFqns) {
+        UpdateHierarchy(UpdateRecord record) {
+            this(record.fqn(), record.updateAncestorFqns());
+        }
     }
 }

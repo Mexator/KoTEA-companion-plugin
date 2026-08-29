@@ -1,53 +1,14 @@
 package com.kotea.companion.util;
 
-import com.intellij.psi.*;
+import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiElement;
+import com.kotea.companion.commands.CommandUtil;
 import com.kotea.companion.events.EventUtil;
-import com.kotea.companion.index.KoTEAIndexService;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.*;
 
 public class KoTEAUtil {
-
-    public static boolean isNavigableCommand(@Nullable PsiElement element) {
-        if (element instanceof PsiClass psiClass) {
-            return isNavigableCommandClass(psiClass);
-        }
-        UClass uClass = UastContextKt.toUElement(element, UClass.class);
-        return uClass != null && isNavigableCommandClass(uClass.getJavaPsi());
-    }
-
-    private static boolean isNavigableCommandClass(@Nullable PsiClass psiClass) {
-        if (psiClass == null) return false;
-        if (psiClass.isInterface() || psiClass.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
-        return KoTEAIndexService.getInstance(psiClass.getProject()).getIndex().isCommand(psiClass);
-    }
-
-    public static boolean isCommandsHandler(UClass uClass, PsiClass pClass) {
-        for (UTypeReferenceExpression interfaceRef : uClass.getUastSuperTypes()) {
-            PsiType type = interfaceRef.getType();
-
-            if (type instanceof PsiClassType classType) {
-                PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
-                PsiClass iClass = resolveResult.getElement();
-
-                if (iClass != null && "CommandsFlowHandler".equals(iClass.getName())) {
-                    PsiType[] params = classType.getParameters();
-
-                    if (params.length > 0) {
-                        PsiType firstParam = params[0];
-
-                        PsiElementFactory psiElementFactory = JavaPsiFacade.getElementFactory(pClass.getProject());
-                        PsiType commandType = psiElementFactory.createType(pClass);
-
-                        if (firstParam.isAssignableFrom(commandType)) return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
 
     @Nullable
     public static PsiElement tryResolveToKoTEAClass(PsiElement element) {
@@ -68,7 +29,7 @@ public class KoTEAUtil {
 
         if (uClass != null) {
             PsiClass psiClass = uClass.getJavaPsi();
-            if (isNavigableCommand(psiClass)) {
+            if (CommandUtil.isNavigableCommand(psiClass)) {
                 return uClass.getSourcePsi();
             }
         }

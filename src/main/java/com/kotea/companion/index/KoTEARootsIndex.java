@@ -7,14 +7,19 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 import java.util.Set;
 
-public final class KoTEAIndex {
+/**
+ * Provides an ability to check if a given PsiClass <br>
+ * - Is a Command (via {@link KoTEARootsIndex#isCommand}) <br>
+ * - Is an Event (via {@link KoTEARootsIndex#isEvent})
+ */
+public final class KoTEARootsIndex {
 
-    public static final KoTEAIndex EMPTY = new KoTEAIndex(Set.of(), Set.of());
+    public static final KoTEARootsIndex EMPTY = new KoTEARootsIndex(Set.of(), Set.of());
 
     private final Set<String> eventRootFqns;
     private final Set<String> commandRootFqns;
 
-    public KoTEAIndex(Set<String> eventRootFqns, Set<String> commandRootFqns) {
+    public KoTEARootsIndex(Set<String> eventRootFqns, Set<String> commandRootFqns) {
         this.eventRootFqns = Set.copyOf(eventRootFqns);
         this.commandRootFqns = Set.copyOf(commandRootFqns);
     }
@@ -38,7 +43,7 @@ public final class KoTEAIndex {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof KoTEAIndex other)) return false;
+        if (!(o instanceof KoTEARootsIndex other)) return false;
         return eventRootFqns.equals(other.eventRootFqns) && commandRootFqns.equals(other.commandRootFqns);
     }
 

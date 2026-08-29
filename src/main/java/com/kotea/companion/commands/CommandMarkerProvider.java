@@ -22,7 +22,6 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
-import com.kotea.companion.util.KoTEAUtil;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
@@ -76,7 +75,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
         PsiClass psiClass = uCommand.getJavaPsi();
 
-        if (KoTEAUtil.isNavigableCommand(psiClass)) {
+        if (CommandUtil.isNavigableCommand(psiClass)) {
 
             PsiElement identifier = psiClass.getNameIdentifier();
             if (identifier == null) return;
@@ -95,7 +94,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         PsiMethod constructor = callExpression.resolve();
         if (constructor != null && constructor.isConstructor()) {
             PsiClass constructedClass = constructor.getContainingClass();
-            if (constructedClass != null && KoTEAUtil.isNavigableCommand(constructedClass)) {
+            if (constructedClass != null && CommandUtil.isNavigableCommand(constructedClass)) {
                 UClass uCommand = UastContextKt.toUElement(constructedClass, UClass.class);
                 if (uCommand != null) {
                     RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
@@ -115,7 +114,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
             if (call != null) {
                 if (call.getValueArguments().contains(uElement) || call.getValueArguments().contains(parent)) {
                     PsiElement res = ref.resolve();
-                    if (res instanceof PsiClass psiClass && KoTEAUtil.isNavigableCommand(psiClass)) {
+                    if (res instanceof PsiClass psiClass && CommandUtil.isNavigableCommand(psiClass)) {
                         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, psiClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
                         result.add(marker);
                     }
@@ -135,7 +134,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         UClass uCommand = UastUtils.getParentOfType(ref, UClass.class);
         if (uCommand == null) return;
 
-        if (!KoTEAUtil.isCommandsHandler(uCommand, targetCommand)) return;
+        if (!CommandUtil.isCommandsHandler(uCommand, targetCommand)) return;
 
         RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission);
 

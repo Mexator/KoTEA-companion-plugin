@@ -9,7 +9,6 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.kotea.companion.util.KoTEAUtil;
 import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
@@ -50,7 +49,7 @@ public class CommandProcessingSearcher {
             if (uElement == null) return true;
 
             UClass handlerClass = UastUtils.getParentOfType(uElement, UClass.class);
-            if (handlerClass != null && KoTEAUtil.isCommandsHandler(handlerClass, classCommand)) {
+            if (handlerClass != null && CommandUtil.isCommandsHandler(handlerClass, classCommand)) {
                 PsiClass psiHandler = handlerClass.getJavaPsi();
                 PsiMethod[] methods = psiHandler.findMethodsByName("handle", false);
                 if (methods.length != 0) {

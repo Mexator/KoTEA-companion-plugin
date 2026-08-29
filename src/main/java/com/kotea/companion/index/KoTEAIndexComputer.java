@@ -132,7 +132,7 @@ public final class KoTEAIndexComputer {
      * since an anonymous {@code object : Update<...> {}} can't be anyone's supertype) plus the union
      * of the surviving records' Event/Command Root FQNs.
      */
-    public static KoTEAIndex derive(Collection<List<UpdateRecord>> recordsByFile) {
+    public static KoTEARootsIndex derive(Collection<List<UpdateRecord>> recordsByFile) {
         List<UpdateRecord> all = new ArrayList<>();
         for (List<UpdateRecord> records : recordsByFile) all.addAll(records);
 
@@ -148,7 +148,7 @@ public final class KoTEAIndexComputer {
             if (record.eventRootFqn() != null) eventRootFqns.add(record.eventRootFqn());
             if (record.commandRootFqn() != null) commandRootFqns.add(record.commandRootFqn());
         }
-        return new KoTEAIndex(eventRootFqns, commandRootFqns);
+        return new KoTEARootsIndex(eventRootFqns, commandRootFqns);
     }
 
     @Nullable
