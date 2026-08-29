@@ -5,9 +5,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 
 /**
- * One project class found to implement {@code Update}, recorded as strings so it can outlive the
- * PSI edit that produced it. {@code fqn} is null for an anonymous {@code object : Update<...> {}}
- * declaration, which has no qualified name and is therefore always a Feature Update.
+ * Short summary about a specific Update interface implementation. The summary is extracted from classes' Psi.
+ * Psi element may be destroyed, but this record is safe to persist.
+ *
+ * @param fqn fully qualified name of the update class, null for anonymous class
  */
 public record UpdateRecord(
         @Nullable String fqn,

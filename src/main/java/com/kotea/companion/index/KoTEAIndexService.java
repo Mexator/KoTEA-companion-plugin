@@ -1,5 +1,6 @@
 package com.kotea.companion.index;
 
+import com.intellij.ProjectTopics;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
@@ -58,12 +59,6 @@ public final class KoTEAIndexService implements Disposable {
     private final AtomicLong changeCounter = new AtomicLong();
     private final SimpleModificationTracker modificationTracker = new SimpleModificationTracker();
 
-    /**
-     * Every rebuild - incremental patch or full scan - runs here, one at a time. Size 1 makes this
-     * the single writer of {@link #recordsByFile}, and makes a newly scheduled rebuild simply queue
-     * behind a running one rather than preempt it. {@link #recomputePending} coalesces the queue
-     * depth to at most one waiting job.
-     */
     private final ExecutorService recomputeExecutor =
             AppExecutorUtil.createBoundedApplicationPoolExecutor("KoTEA index recompute", 1);
     private final AtomicBoolean recomputePending = new AtomicBoolean(false);
@@ -76,6 +71,9 @@ public final class KoTEAIndexService implements Disposable {
 
     public KoTEAIndexService(@NotNull Project project) {
         this.project = project;
+    }
+
+    public void registerListeners() {
 
         PsiManager.getInstance(project).addPsiTreeChangeListener(new PsiTreeAnyChangeAbstractAdapter() {
             @Override
@@ -150,12 +148,6 @@ public final class KoTEAIndexService implements Disposable {
         scheduleRecompute();
     }
 
-    /**
-     * Coalescing gate in front of {@link #recomputeExecutor}: while a job is already pending
-     * (queued or running and not yet past its re-arm point) this is a no-op. {@link #recompute()}
-     * clears the gate near its end and, if {@link #changeCounter} moved meanwhile, re-schedules -
-     * so a change that raced the running job is never dropped.
-     */
     private void scheduleRecompute() {
         if (!recomputePending.compareAndSet(false, true)) return;
         try {
@@ -166,13 +158,6 @@ public final class KoTEAIndexService implements Disposable {
         }
     }
 
-    /**
-     * One rebuild, alone on {@link #recomputeExecutor}. Picks the incremental per-file patch, and
-     * falls back to a full project scan when a dirty file's Feature-Update membership signature
-     * changed (an Update implementation added/removed/renamed/re-parented can flip classes in files
-     * that weren't touched), a non-empty file was deleted, or a full rebuild is otherwise due
-     * (startup, module roots changed). Both paths end in {@link #publish}.
-     */
     private void recompute() {
         long stamp = changeCounter.get();
         try {
@@ -212,24 +197,15 @@ public final class KoTEAIndexService implements Disposable {
                     recomputeStart
             );
         } finally {
-            // Clear the gate before re-checking, so a change landing after the check still re-arms
-            // via its own scheduleRecompute. Re-arm on !initialized too: a cancelled first full
-            // scan (Stop, or a transient dispose) must not leave the index permanently empty.
-            // A ProcessCanceledException propagates out untouched - catching it would trip the
-            // "PCE must be rethrown" inspection, and the bounded executor drops it unlogged.
             recomputePending.set(false);
             if (changeCounter.get() != stamp || !initialized) scheduleRecompute();
         }
     }
 
-    /**
-     * Re-derives the {@link UpdateRecord}s for each dirty file and checks the deleted ones, all in
-     * one read action. Returns the per-file patch to apply, or {@code null} if a full rebuild is
-     * required. Reads {@code recordsByFile} but does not mutate it, so an NBRA restart under
-     * write-action contention is harmless.
-     */
     private @Nullable Map<VirtualFile, List<UpdateRecord>> computeIncrementalPatch(
-            Set<VirtualFile> dirtySnapshot, Set<VirtualFile> deletedSnapshot) {
+            Set<VirtualFile> dirtySnapshot,
+            Set<VirtualFile> deletedSnapshot
+    ) {
         Map<VirtualFile, List<UpdateRecord>> patched = new HashMap<>();
         for (VirtualFile file : dirtySnapshot) {
             List<UpdateRecord> newRecords = KoTEAIndexComputer.computeForFile(project, file);
@@ -247,13 +223,6 @@ public final class KoTEAIndexService implements Disposable {
         return patched;
     }
 
-    /**
-     * The full project-wide scan, under a cancelable status-bar progress bar. Still runs inline on
-     * {@link #recomputeExecutor} (not a separate scheduler); a Stop click or disposal surfaces as a
-     * {@link ProcessCanceledException} that unwinds through {@link #recompute()}. {@code recordsByFile}
-     * is replaced only once the scan produces a complete result, so an NBRA restart under write
-     * contention can't leave it half-updated.
-     */
     private void runFull(long stamp) {
         long recomputeStart = PerfLog.start();
 
@@ -276,11 +245,6 @@ public final class KoTEAIndexService implements Disposable {
         publish(KoTEAIndexComputer.derive(recordsByFile.values()), stamp, "full", recomputeStart);
     }
 
-    /**
-     * Shared tail for both recompute paths: swap in the new snapshot if it actually changed (bump
-     * the tracker, repaint gutters), then clear the consumed dirty/deleted sets - but only if
-     * nothing new arrived while we were computing, so an edit that raced the recompute isn't lost.
-     */
     private void publish(KoTEARootsIndex newIndex, long stamp, String pathLabel, long recomputeStart) {
         boolean changed = !newIndex.equals(snapshot);
         if (changed) {

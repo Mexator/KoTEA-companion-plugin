@@ -8,8 +8,10 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Provides an ability to check if a given PsiClass <br>
- * - Is a Command (via {@link KoTEARootsIndex#isCommand}) <br>
+ * Provides an ability to check if a given PsiClass
+ * <br>
+ * - Is a Command (via {@link KoTEARootsIndex#isCommand})
+ * <br>
  * - Is an Event (via {@link KoTEARootsIndex#isEvent})
  */
 public final class KoTEARootsIndex {
