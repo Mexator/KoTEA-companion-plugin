@@ -212,18 +212,13 @@ public final class KoTEAIndexService implements Disposable {
                     recomputeStart
             );
         } finally {
-            // A ProcessCanceledException (user hit Stop, or the service is being disposed) is left
-            // to propagate out of this method: recordsByFile keeps its previous contents, and
-            // BoundedTaskExecutor.doRun explicitly skips logging for ControlFlowException (which
-            // ProcessCanceledException implements), so no idea.log noise. Catching it here instead
-            // would trip the platform's "PCE must be rethrown" inspection. This finally still runs,
-            // so the gate is cleared either way.
-            //
-            // Order matters: clear the gate first, then re-check the counter. A change that lands
-            // after the re-check but before this method returns still re-arms the gate through its
-            // own scheduleRecompute, because the gate is already open.
+            // Clear the gate before re-checking, so a change landing after the check still re-arms
+            // via its own scheduleRecompute. Re-arm on !initialized too: a cancelled first full
+            // scan (Stop, or a transient dispose) must not leave the index permanently empty.
+            // A ProcessCanceledException propagates out untouched - catching it would trip the
+            // "PCE must be rethrown" inspection, and the bounded executor drops it unlogged.
             recomputePending.set(false);
-            if (changeCounter.get() != stamp) scheduleRecompute();
+            if (changeCounter.get() != stamp || !initialized) scheduleRecompute();
         }
     }
 
@@ -253,12 +248,11 @@ public final class KoTEAIndexService implements Disposable {
     }
 
     /**
-     * The full project-wide scan. Shows a cancelable status-bar progress bar; its Stop button, and
-     * service disposal, surface as a {@link ProcessCanceledException} that unwinds through
-     * {@link #recompute()} (see the note there). Not a separate scheduling path - it still runs
-     * inline on {@link #recomputeExecutor}; {@code computeAll} can, like any non-blocking read, be
-     * restarted by concurrent EDT writes, so {@code recordsByFile} is only touched once the scan
-     * has produced a complete result.
+     * The full project-wide scan, under a cancelable status-bar progress bar. Still runs inline on
+     * {@link #recomputeExecutor} (not a separate scheduler); a Stop click or disposal surfaces as a
+     * {@link ProcessCanceledException} that unwinds through {@link #recompute()}. {@code recordsByFile}
+     * is replaced only once the scan produces a complete result, so an NBRA restart under write
+     * contention can't leave it half-updated.
      */
     private void runFull(long stamp) {
         long recomputeStart = PerfLog.start();
