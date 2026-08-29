@@ -50,7 +50,7 @@ One searcher per navigation direction: `EventEmissionSearcher`, `EventProcessing
 `src/main/resources/META-INF/plugin.xml` wires everything together — extension points for `lineMarkerProvider`, `intentionAction`, and keyboard shortcut `<keymap>` entries. All four actions and both line marker providers must be registered here.
 
 ### Threading Model
-Heavy PSI searches run inside `ReadAction.nonBlocking(...).inSmartMode(project).submit(executor)` to avoid blocking the EDT. Results are collected and passed back via callbacks. Never call PSI APIs from the EDT without a `ReadAction`.
+Two invariants: never block the EDT on a heavy PSI search, and never touch PSI off the EDT without holding a read lock. How any given search meets them is an implementation choice — most currently run on a background thread via `ReadAction.nonBlocking(...).inSmartMode(project).submit(executor)` with results handed back through callbacks, but that's the prevailing pattern, not a mandate.
 
 ## Key Technologies
 - **IntelliJ Platform SDK** targeting Android Studio 2025.3.1.1
