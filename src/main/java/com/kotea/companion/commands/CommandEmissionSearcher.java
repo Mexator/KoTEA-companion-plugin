@@ -71,8 +71,7 @@ public class CommandEmissionSearcher {
             return true;
         });
 
-        PerfLog.logElapsed(LOG, "CommandEmissionSearcher search for " + uClass.getName() + " found "
-                + targets.size() + " results", start);
+        PerfLog.logSearch(LOG, "CommandEmissionSearcher", uClass.getName(), targets.size(), start);
         return targets;
     }
 }

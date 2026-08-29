@@ -51,8 +51,7 @@ public class EventEmissionSearcher {
             if (PsiTreeUtil.getParentOfType(el, KtTypeReference.class) != null) continue;
             emissionPlaces.add(el);
         }
-        PerfLog.logElapsed(LOG, "EventEmissionSearcher search for " + target.getName() + " found "
-                + emissionPlaces.size() + " results", start);
+        PerfLog.logSearch(LOG, "EventEmissionSearcher", target.getName(), emissionPlaces.size(), start);
         return emissionPlaces;
     }
 }

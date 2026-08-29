@@ -54,9 +54,9 @@ public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
     protected void collectNavigationMarkers(@NotNull PsiElement element,
                                             @NotNull Collection<? super RelatedItemLineMarkerInfo<?>> result) {
 
-        long start = PerfLog.start();
-
         if (!(element instanceof LeafPsiElement)) return;
+
+        long start = PerfLog.start();
 
         PsiElement parent = element.getParent();
         if (parent instanceof KtNameReferenceExpression) {
@@ -88,7 +88,7 @@ public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
             result.add(createMarker(element, targetClass, PluginIcons.PROCESSING, "Processing", EventProcessingSearcher::findProcessing));
         }
 
-        PerfLog.warnIfSlow(LOG, "EventMarkerProvider marker collection for element " + element + "is slow", start, 10);
+        PerfLog.warnIfSlow(LOG, "EventMarkerProvider marker collection for element " + element + " is slow", start, 10);
     }
 
     private RelatedItemLineMarkerInfo<PsiElement> createMarker(PsiElement element, KtClassOrObject targetClass, Icon icon,

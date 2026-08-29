@@ -51,8 +51,7 @@ public class EventProcessingSearcher {
             if (PsiTreeUtil.getParentOfType(el, KtParameter.class) != null) continue;
             results.add(el);
         }
-        PerfLog.logElapsed(LOG, "EventProcessingSearcher search for " + target.getName() + " found "
-                + results.size() + " results", start);
+        PerfLog.logSearch(LOG, "EventProcessingSearcher", target.getName(), results.size(), start);
         return results;
     }
 }

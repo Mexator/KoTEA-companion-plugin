@@ -54,17 +54,19 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         long start = PerfLog.start();
 
         addClassMarker(element, result);
-        long classAdded = PerfLog.start();
+        long afterClass = System.nanoTime();
         addConstructorCallMarker(element, result);
-        long constructorAdded = PerfLog.start();
+        long afterConstructor = System.nanoTime();
         addObjectMarker(element, result);
-        long objectAdded = PerfLog.start();
+        long afterObject = System.nanoTime();
         addInHandle(element, result);
-        PerfLog.warnIfSlow(LOG, "CommandMarkerProvider marker collection for " + element + "is slow; " +
-                "class: " + (classAdded - start) + "ms, " +
-                "constructor: " + (constructorAdded - classAdded)/1_000_000 + "ms, " +
-                "object: " + (objectAdded - constructorAdded)/1_000_000 + "ms, " +
-                "inHandle: " + (PerfLog.start() - objectAdded)/1_000_000 + "ms",
+        long afterInHandle = System.nanoTime();
+
+        PerfLog.warnIfSlow(LOG, "CommandMarkerProvider marker collection for " + element + " is slow; " +
+                "class: " + (afterClass - start) / 1_000_000 + " ms, " +
+                "constructor: " + (afterConstructor - afterClass) / 1_000_000 + " ms, " +
+                "object: " + (afterObject - afterConstructor) / 1_000_000 + " ms, " +
+                "inHandle: " + (afterInHandle - afterObject) / 1_000_000 + " ms",
                 start, 10);
     }
 

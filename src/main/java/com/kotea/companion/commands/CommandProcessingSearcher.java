@@ -59,8 +59,7 @@ public class CommandProcessingSearcher {
             return true;
         });
 
-        PerfLog.logElapsed(LOG, "CommandProcessingSearcher search for " + uClass.getName() + " found "
-                + targets.size() + " results", start);
+        PerfLog.logSearch(LOG, "CommandProcessingSearcher", uClass.getName(), targets.size(), start);
         return targets;
     }
 }
