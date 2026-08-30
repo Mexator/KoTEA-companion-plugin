@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Editor;
@@ -104,7 +105,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
                 .build();
         AnActionEvent event = TestActionEvent.createTestEvent(action, context);
 
-        action.actionPerformed(event);
+        ActionUtil.performAction(action, event);
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue();
 
         assertLandedOn(expected);
@@ -160,10 +161,6 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     private UClass toUClass(KtClassOrObject ktClass) {
         return UastContextKt.toUElement(ktClass, UClass.class);
-    }
-
-    private KtClassOrObject ktClass(String relativePath, String name) {
-        return findKtClass(myFixture.configureFromTempProjectFile(relativePath), name);
     }
 
     private static String iconName(Icon icon) {

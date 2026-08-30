@@ -78,6 +78,14 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
                 .orElseThrow(() -> new AssertionError("no class " + name + " in " + file.getName()));
     }
 
+    /**
+     * Opens {@code relativePath} in a virtual editor (to get its PSI) and returns the {@link KtClassOrObject}
+     * named {@code name} inside it.
+     */
+    protected KtClassOrObject ktClass(String relativePath, String name) {
+        return findKtClass(myFixture.configureFromTempProjectFile(relativePath), name);
+    }
+
     private static void sleepBriefly() {
         try {
             Thread.sleep(50);
