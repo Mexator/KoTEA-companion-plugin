@@ -1,10 +1,13 @@
 package com.kotea.companion.fixtures;
 
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import com.kotea.companion.index.KoTEAIndexService;
 import com.kotea.companion.index.KoTEARootsIndex;
+import org.jetbrains.kotlin.psi.KtClassOrObject;
 
 import java.io.File;
 
@@ -19,6 +22,23 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
     @Override
     protected LightProjectDescriptor getProjectDescriptor() {
         return KoTEAProjectDescriptor.INSTANCE;
+    }
+
+    /**
+     * Copies a {@code testData} fixture directory into the project and waits until a KoTEA index is ready
+     */
+    protected void openFixtureProject(String fixtureDir) {
+        myFixture.copyDirectoryToProject(fixtureDir, "");
+        KoTEAIndexService.getInstance(getProject()).registerListeners();
+        awaitIndex();
+    }
+
+    /** First {@link KtClassOrObject} anywhere under {@code file} whose simple name is {@code name}. */
+    protected static KtClassOrObject findKtClass(PsiFile file, String name) {
+        return PsiTreeUtil.findChildrenOfType(file, KtClassOrObject.class).stream()
+                .filter(candidate -> name.equals(candidate.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no class " + name + " in " + file.getName()));
     }
 
     protected KoTEARootsIndex awaitIndex() {

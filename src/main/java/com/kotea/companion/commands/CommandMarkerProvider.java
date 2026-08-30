@@ -145,6 +145,8 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
     private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, PsiClass targetCommand, Icon icon, String title,
                                                             BiFunction<UClass, GlobalSearchScope, List<PsiElement>> searchFunc) {
+        PsiElement anchor = leafOf(element);
+
         GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) -> {
             Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
             if (editor == null) return;
@@ -167,7 +169,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                         UClass uClass = UastContextKt.toUElement(targetCommand, UClass.class);
                         long moduleSearchStart = PerfLog.start();
                         List<PsiElement> targets = ReadAction.compute(() ->
-                                searchFunc.apply(uClass, ScopeBuilder.getModuleScope(element)));
+                                searchFunc.apply(uClass, ScopeBuilder.getModuleScope(anchor)));
                         PerfLog.logElapsed(LOG, "CommandMarkerProvider module-scope " + title + " search",
                                 moduleSearchStart);
 
@@ -176,7 +178,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                             indicator.setText("Searching in project...");
                             long projectSearchStart = PerfLog.start();
                             targets = ReadAction.compute(() ->
-                                    searchFunc.apply(uClass, ScopeBuilder.getProductionScope(element)));
+                                    searchFunc.apply(uClass, ScopeBuilder.getProductionScope(anchor)));
                             PerfLog.logElapsed(LOG, "CommandMarkerProvider project-scope " + title + " search",
                                     projectSearchStart);
                             scope = "project";
@@ -197,14 +199,23 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         };
 
         return new RelatedItemLineMarkerInfo<>(
-                element,
-                element.getTextRange(),
+                anchor,
+                anchor.getTextRange(),
                 icon,
                 elt -> title,
                 navHandler,
                 GutterIconRenderer.Alignment.CENTER,
                 List::of
         );
+    }
+
+    /** First leaf under {@code element} (or {@code element} itself if it has no children). */
+    private static PsiElement leafOf(PsiElement element) {
+        PsiElement leaf = element;
+        while (leaf.getFirstChild() != null) {
+            leaf = leaf.getFirstChild();
+        }
+        return leaf;
     }
 
     private void showResults(List<PsiElement> targets, String title, String scope, MouseEvent mouseEvent, PsiElement elt) {
