@@ -42,10 +42,6 @@ _Avoid_: leaf event, event case, event variant, event class
 The same, for a Command Root.
 _Avoid_: leaf command, command case, command class
 
-**CommandsFlowHandler**:
-The KoTEA class that consumes a feature's Commands. It is to Commands what the Feature Update
-is to Events: the one place they are processed.
-
 ### Navigation
 
 **Navigable**:

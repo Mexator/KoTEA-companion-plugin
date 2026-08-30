@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.2.2-PRE"
+version = "1.2.0"
 
 repositories {
     mavenCentral()
@@ -61,9 +61,9 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.2.2-PRE</b>
+                <li><b>1.2.0</b>
                     <ul>
-                        <li>Rework Events and Commands discovery via Update classes</li>
+                        <li>Events and Commands are now discovered via Update classes. Previously, naive name-based matching was used</li>
                     </ul>
                 </li>
             </ul>

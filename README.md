@@ -23,7 +23,9 @@ These actions are available for `Commands` and `Events`.
 
 ## Known Issues / Limitations
 
-* Event and Command classes are detected by resolving concrete implementations of `ru.tinkoff.kotea.core.Update` and inspecting their generic type arguments. Only named `class`/`object` implementations of `Update` are found — a SAM-lambda implementation (`Update<S, E, C, N> { ... }` used as an expression) is not detected, since IntelliJ's class hierarchy search only finds named declarations.
+* Event and Command classes are detected by resolving concrete implementations of `ru.tinkoff.kotea.core.Update` 
+  and inspecting their generic type arguments. SAM-lambda implementations of `Update` are not recognized 
+  as Feature Updates. This is because IntelliJ's `ClassInheritorsSearch` can't find SAM-lambda declarations.
 
 ## Installation
 
