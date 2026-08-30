@@ -3,6 +3,8 @@
 This repository is an IDE plugin for projects that use [the KoTEA library](https://opensource.tbank.ru/mobile-tech/KoTEA).
 Its goal is to simplify navigation in a codebase that uses KoTEA.
 
+![Navigating between an Event and its emission and processing sites](docs/assets/demo.gif)
+
 ## The Problem
 
 The `Store`'s created with KoTEA are quite scattered across different files:
