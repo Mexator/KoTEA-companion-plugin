@@ -10,7 +10,10 @@ import org.jetbrains.annotations.NotNull;
 
 public class ScopeBuilder {
     public static GlobalSearchScope getProductionScope(@NotNull PsiElement e) {
-        Project project = e.getProject();
+        return getProductionScope(e.getProject());
+    }
+
+    public static GlobalSearchScope getProductionScope(@NotNull Project project) {
         return GlobalSearchScopes.projectProductionScope(project);
     }
 

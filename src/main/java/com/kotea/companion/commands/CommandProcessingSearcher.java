@@ -1,5 +1,6 @@
 package com.kotea.companion.commands;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
@@ -8,7 +9,7 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
 
@@ -16,6 +17,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CommandProcessingSearcher {
+
+    private static final Logger LOG = Logger.getInstance(CommandProcessingSearcher.class);
 
     public static List<PsiElement> findProcessing(@NotNull UClass uClass, GlobalSearchScope scope) {
         Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(uClass.getJavaPsi(),
@@ -36,6 +39,7 @@ public class CommandProcessingSearcher {
             }
         };
 
+        long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
         PsiClass classCommand = uClass.getJavaPsi();
 
@@ -45,7 +49,7 @@ public class CommandProcessingSearcher {
             if (uElement == null) return true;
 
             UClass handlerClass = UastUtils.getParentOfType(uElement, UClass.class);
-            if (handlerClass != null && KoTEAUtil.isCommandsHandler(handlerClass, classCommand)) {
+            if (handlerClass != null && CommandUtil.isCommandsHandler(handlerClass, classCommand)) {
                 PsiClass psiHandler = handlerClass.getJavaPsi();
                 PsiMethod[] methods = psiHandler.findMethodsByName("handle", false);
                 if (methods.length != 0) {
@@ -55,6 +59,7 @@ public class CommandProcessingSearcher {
             return true;
         });
 
+        PerfLog.logSearch(LOG, "CommandProcessingSearcher", uClass.getName(), targets.size(), start);
         return targets;
     }
 }

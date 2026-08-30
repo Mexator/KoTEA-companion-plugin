@@ -1,5 +1,6 @@
 package com.kotea.companion.events;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.DelegatingGlobalSearchScope;
@@ -9,6 +10,7 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.kotea.companion.util.PerfLog;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtImportDirective;
@@ -20,6 +22,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EventEmissionSearcher {
+
+    private static final Logger LOG = Logger.getInstance(EventEmissionSearcher.class);
 
     public static List<PsiElement> findEmissions(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
         Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(target,
@@ -39,6 +43,7 @@ public class EventEmissionSearcher {
             }
         };
 
+        long start = PerfLog.start();
         List<PsiElement> emissionPlaces = new ArrayList<>();
         for (var ref : ReferencesSearch.search(target, emissionScope, false).findAll()) {
             PsiElement el = ref.getElement();
@@ -46,6 +51,7 @@ public class EventEmissionSearcher {
             if (PsiTreeUtil.getParentOfType(el, KtTypeReference.class) != null) continue;
             emissionPlaces.add(el);
         }
+        PerfLog.logSearch(LOG, "EventEmissionSearcher", target.getName(), emissionPlaces.size(), start);
         return emissionPlaces;
     }
 }
