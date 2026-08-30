@@ -53,4 +53,9 @@ public final class KoTEARootsIndex {
     public int hashCode() {
         return Objects.hash(eventRootFqns, commandRootFqns);
     }
+
+    @Override
+    public String toString() {
+        return "KoTEARootsIndex{events=" + eventRootFqns + ", commands=" + commandRootFqns + "}";
+    }
 }

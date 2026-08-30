@@ -1,5 +1,9 @@
 package com.kotea.companion.fixtures;
 
+import com.intellij.openapi.application.WriteAction;
+import com.intellij.openapi.project.RootsChangeRescanningInfo;
+import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
+import com.intellij.openapi.util.EmptyRunnable;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
@@ -11,7 +15,9 @@ import org.jetbrains.kotlin.psi.KtClassOrObject;
 
 import java.io.File;
 
-/** Base class for the feature-layer tests: shared descriptor + {@code src/test/testData} root. */
+/**
+ * Base class for the feature-layer tests: shared descriptor + {@code src/test/testData} root.
+ */
 public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
 
     @Override
@@ -25,15 +31,46 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
     }
 
     /**
-     * Copies a {@code testData} fixture directory into the project and waits until a KoTEA index is ready
+     * Copies a {@code testData} fixture directory into the project, registers the index listeners and
+     * blocks until {@link KoTEAIndexService}'s snapshot indexes copied files. The project is reused between tests,
+     * so force reindex is needed.
+     *
+     * @param fixtureDir the name of directory inside {@code src/test/testData}
      */
-    protected void openFixtureProject(String fixtureDir) {
+    protected KoTEARootsIndex openFixtureProject(String fixtureDir) {
         myFixture.copyDirectoryToProject(fixtureDir, "");
         KoTEAIndexService.getInstance(getProject()).registerListeners();
-        awaitIndex();
+        return forceFullIndexRebuild();
     }
 
-    /** First {@link KtClassOrObject} anywhere under {@code file} whose simple name is {@code name}. */
+    /**
+     * Runs a full rescan, waits for it to finish, and returns the resulting snapshot
+     */
+    protected KoTEARootsIndex forceFullIndexRebuild() {
+        WriteAction.runAndWait(() -> ProjectRootManagerEx.getInstanceEx(getProject())
+                .makeRootsChange(EmptyRunnable.getInstance(), RootsChangeRescanningInfo.TOTAL_RESCAN));
+        awaitIndexIdle();
+        return KoTEAIndexService.getInstance(getProject()).getIndex();
+    }
+
+    /**
+     * Pumps the EDT queue until {@link KoTEAIndexService#isIdle()}
+     */
+    protected void awaitIndexIdle() {
+        KoTEAIndexService service = KoTEAIndexService.getInstance(getProject());
+        long deadlineMs = System.currentTimeMillis() + 60_000;
+        while (!service.isIdle()) {
+            if (System.currentTimeMillis() > deadlineMs) {
+                throw new AssertionError("KoTEA index did not go idle within 60s; last snapshot: " + service.getIndex());
+            }
+            PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue();
+            sleepBriefly();
+        }
+    }
+
+    /**
+     * First {@link KtClassOrObject} anywhere under {@code file} whose simple name is {@code name}.
+     */
     protected static KtClassOrObject findKtClass(PsiFile file, String name) {
         return PsiTreeUtil.findChildrenOfType(file, KtClassOrObject.class).stream()
                 .filter(candidate -> name.equals(candidate.getName()))
@@ -41,29 +78,12 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
                 .orElseThrow(() -> new AssertionError("no class " + name + " in " + file.getName()));
     }
 
-    protected KoTEARootsIndex awaitIndex() {
-        KoTEAIndexService service = KoTEAIndexService.getInstance(getProject());
-        long deadlineMs = System.currentTimeMillis() + 60_000;
-        KoTEARootsIndex previous = null;
-        int stableStreak = 0;
-        while (System.currentTimeMillis() < deadlineMs) {
-            PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue();
-            KoTEARootsIndex current = service.getIndex();
-            boolean settled = current.equals(previous) && !current.equals(KoTEARootsIndex.EMPTY);
-            if (settled) {
-                if (++stableStreak >= 10) return current;
-            } else {
-                stableStreak = 0;
-            }
-            previous = current;
-            try {
-                //noinspection BusyWait
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
-            }
+    private static void sleepBriefly() {
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
         }
-        throw new AssertionError("KoTEA index did not settle within 60s; last snapshot: " + service.getIndex());
     }
 }

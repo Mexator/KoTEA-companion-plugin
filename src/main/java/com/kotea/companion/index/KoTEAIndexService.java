@@ -1,13 +1,11 @@
 package com.kotea.companion.index;
 
-import com.intellij.ProjectTopics;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.impl.BackgroundableProcessIndicator;
 import com.intellij.openapi.project.DumbService;
@@ -30,6 +28,7 @@ import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.idea.KotlinFileType;
 
 import java.util.HashMap;
@@ -89,18 +88,17 @@ public final class KoTEAIndexService implements Disposable {
         project.getMessageBus().connect(this).subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
             @Override
             public void after(@NotNull List<? extends VFileEvent> events) {
-                boolean anyRelevant = false;
                 for (VFileEvent event : events) {
                     VirtualFile file = event.getFile();
-                    if (file == null || !isRelevant(file)) continue;
-                    anyRelevant = true;
+                    if (file == null) continue;
                     if (event instanceof VFileDeleteEvent) {
+                        if (!file.getFileType().equals(KotlinFileType.INSTANCE)) continue;
                         deletedFiles.add(file);
-                    } else {
+                    } else if (isRelevant(file)) {
                         dirtyFiles.add(file);
                     }
                 }
-                if (anyRelevant) onChangeDetected();
+                if (!dirtyFiles.isEmpty() || !deletedFiles.isEmpty()) onChangeDetected();
             }
         });
 
@@ -130,6 +128,16 @@ public final class KoTEAIndexService implements Disposable {
      */
     public ModificationTracker getModificationTracker() {
         return modificationTracker;
+    }
+
+    /**
+     * Test hook: {@code true} when no rebuild is running or queued, i.e. every change observed so
+     * far has been folded into {@link #getIndex()}. Production code reads {@link #getIndex()}
+     * directly (it is stale-while-revalidating) and has no need for this.
+     */
+    @TestOnly
+    public boolean isIdle() {
+        return initialized && !recomputePending.get();
     }
 
     @Override
