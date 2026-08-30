@@ -18,13 +18,18 @@ repositories {
 
 dependencies {
     intellijPlatform {
+        // https://plugins.jetbrains.com/docs/intellij/android-studio-releases-list.html
         androidStudio("2025.3.1.1")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
+        // for MavenDependencyUtil
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Plugin.Java)
 
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("org.jetbrains.android")
     }
+
+    testImplementation("junit:junit:4.13.2")
 }
 
 val localProperties = Properties().apply {

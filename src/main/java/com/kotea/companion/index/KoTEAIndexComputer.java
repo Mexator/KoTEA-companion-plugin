@@ -24,15 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
 import org.jetbrains.kotlin.asJava.classes.KtLightClass;
-import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.kotlin.psi.KtFile;
-import org.jetbrains.kotlin.psi.KtReferenceExpression;
-import org.jetbrains.kotlin.psi.KtSuperTypeListEntry;
-import org.jetbrains.kotlin.psi.KtTreeVisitorVoid;
-import org.jetbrains.kotlin.psi.KtTypeElement;
-import org.jetbrains.kotlin.psi.KtTypeProjection;
-import org.jetbrains.kotlin.psi.KtTypeReference;
-import org.jetbrains.kotlin.psi.KtUserType;
+import org.jetbrains.kotlin.psi.*;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -222,8 +214,10 @@ public final class KoTEAIndexComputer {
         PsiElement resolved = psiRef != null ? psiRef.resolve() : null;
         if (resolved == null) return null;
 
-        PsiElement nav = resolved.getNavigationElement();
-        if (nav instanceof KtClassOrObject cls) return LightClassUtilsKt.toLightClass(cls);
-        return resolved instanceof PsiClass psiClass ? psiClass : null;
+        return switch (resolved) {
+            case KtClassOrObject ktClass -> LightClassUtilsKt.toLightClass(ktClass);
+            case KtConstructor<?> constructor -> LightClassUtilsKt.toLightClass(constructor.getContainingClassOrObject());
+            default -> null;
+        };
     }
 }
