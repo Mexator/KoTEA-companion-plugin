@@ -1,19 +1,30 @@
 package com.kotea.companion.fixtures;
 
+import com.intellij.codeInsight.daemon.GutterMark;
+import com.intellij.codeInsight.daemon.LineMarkerInfo;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.project.RootsChangeRescanningInfo;
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
 import com.intellij.openapi.util.EmptyRunnable;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
+import com.intellij.util.containers.ContainerUtil;
 import com.kotea.companion.index.KoTEAIndexService;
 import com.kotea.companion.index.KoTEARootsIndex;
+import com.kotea.companion.util.PluginIcons;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
+import javax.swing.Icon;
 import java.io.File;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Base class for the feature-layer tests: shared descriptor + {@code src/test/testData} root.
@@ -84,6 +95,45 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
      */
     protected KtClassOrObject ktClass(String relativePath, String name) {
         return findKtClass(myFixture.configureFromTempProjectFile(relativePath), name);
+    }
+
+    /**
+     * Opens {@code relativePath} and maps each class whose name identifier carries an Emission/Processing
+     * gutter to the set of those icons. Classes with no KoTEA gutter are absent.
+     */
+    protected Map<String, Set<Icon>> koTEAGuttersByClass(String relativePath) {
+        PsiFile file = myFixture.configureFromTempProjectFile(relativePath);
+        List<GutterMark> gutters = ContainerUtil.filter(myFixture.findAllGutters(), KoTEAFixtureTestCase::isKoTEAGutter);
+
+        Map<String, Set<Icon>> byClass = new HashMap<>();
+        for (KtClassOrObject cls : PsiTreeUtil.findChildrenOfType(file, KtClassOrObject.class)) {
+            PsiElement nameId = cls.getNameIdentifier();
+            if (nameId == null) continue;
+            int offset = nameId.getTextRange().getStartOffset();
+            for (GutterMark gutter : gutters) {
+                if (markerCovers(gutter, offset)) {
+                    byClass.computeIfAbsent(cls.getName(), name -> new HashSet<>()).add(gutter.getIcon());
+                }
+            }
+        }
+        return byClass;
+    }
+
+    /** Simple names of the classes in {@code relativePath} whose name identifier carries a KoTEA gutter. */
+    protected Set<String> koTEAGutterOwners(String relativePath) {
+        return koTEAGuttersByClass(relativePath).keySet();
+    }
+
+    protected static boolean isKoTEAGutter(GutterMark gutter) {
+        Icon icon = gutter.getIcon();
+        return icon == PluginIcons.EMISSION || icon == PluginIcons.PROCESSING;
+    }
+
+    /** True if {@code gutter} is a line marker whose anchor element's range contains {@code offset}. */
+    protected static boolean markerCovers(GutterMark gutter, int offset) {
+        if (!(gutter instanceof LineMarkerInfo.LineMarkerGutterIconRenderer<?> renderer)) return false;
+        PsiElement element = renderer.getLineMarkerInfo().getElement();
+        return element != null && element.getTextRange() != null && element.getTextRange().containsOffset(offset);
     }
 
     private static void sleepBriefly() {

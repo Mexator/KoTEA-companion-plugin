@@ -21,8 +21,6 @@ KoTEA Companion Plugin — a JetBrains IDE plugin for Android Studio that adds s
 
 Build output: `build/distributions/*.zip`
 
-The IDE run configuration at `.run/Run IDE with Plugin.run.xml` can be used directly from the IDE.
-
 ## Architecture
 
 The plugin has three layers that work together for each navigable element type (Event and Command):
@@ -61,10 +59,12 @@ scenario; KoTEA itself is supplied by the real `ru.tinkoff.kotea:core` artifact,
 stubs.
 
 ## Key Technologies
-- **IntelliJ Platform SDK** targeting Android Studio 2025.3.1.1
-- **UAST** for language-agnostic syntax tree access (works across Java and Kotlin)
-- **PSI** for Kotlin-specific analysis where UAST is insufficient
-- Java 21, Gradle Kotlin DSL (`build.gradle.kts`)
+- **IntelliJ Platform SDK** targeting Android Studio (for a version consult `build.gradle.kts`)
+
+## Codestyle
+- Avoid excessive comments, use only when absolutely necessary
+
+## Agent skills
 
 ## Viewing platform sources
 

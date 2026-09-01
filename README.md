@@ -23,11 +23,18 @@ The actions are triggered by clicking gutter icons and invoking hotkeys.
 
 These actions are available for `Commands` and `Events`.
 
+## How does it work
+
+At project startup, the plugin indexes all implementations of `ru.tinkoff.kotea.core.Update`. Their generic arguments
+are resolved as root classes for Events, Commands and News. These are called Roots. For each subclass of a Root,
+the plugin adds a gutter icon and hotkey actions.
+
 ## Known Issues / Limitations
 
-* Event and Command classes are detected by resolving concrete implementations of `ru.tinkoff.kotea.core.Update` 
-  and inspecting their generic type arguments. SAM-lambda implementations of `Update` are not recognized 
-  as Feature Updates. This is because IntelliJ's `ClassInheritorsSearch` can't find SAM-lambda declarations.
+* Each class is resolved to a single KoTEA entity. For example, if a class implements both Command and News, it is 
+  considered as News. The role is resolved by the closest superclass.
+* [SAM-lambda](https://kotlinlang.org/docs/fun-interfaces.html#sam-conversions) implementation of 
+  `ru.tinkoff.kotea.core.Update` are not indexed. Their generic type arguments will not be recognized as KoTEA entities.
 
 ## Installation
 

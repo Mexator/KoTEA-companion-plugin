@@ -14,7 +14,8 @@ public record UpdateRecord(
         @Nullable String fqn,
         Set<String> updateAncestorFqns,
         @Nullable String eventRootFqn,
-        @Nullable String commandRootFqn) {
+        @Nullable String commandRootFqn,
+        @Nullable String newsRootFqn) {
 
     public UpdateRecord {
         updateAncestorFqns = Set.copyOf(updateAncestorFqns);

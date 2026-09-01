@@ -14,7 +14,7 @@ public class KoTEARootsIndexPsiTest extends KoTEAFixtureTestCase {
         myFixture.copyDirectoryToProject("rootsHierarchy", "");
 
         KoTEARootsIndex index = new KoTEARootsIndex(
-                Set.of("roots.FeatureEvent"), Set.of("roots.FeatureCommand"));
+                Set.of("roots.FeatureEvent"), Set.of("roots.FeatureCommand"), Set.of());
 
         ReadAction.run(() -> {
             assertTrue("root is an Event", index.isEvent(findClass("roots.FeatureEvent")));
@@ -28,6 +28,24 @@ public class KoTEARootsIndexPsiTest extends KoTEAFixtureTestCase {
             assertTrue("concrete leaf is a Command", index.isCommand(findClass("roots.LoadItems")));
             assertFalse("unrelated class is not a Command", index.isCommand(findClass("roots.Unrelated")));
             assertFalse("an Event is not a Command", index.isCommand(findClass("roots.ItemClicked")));
+        });
+    }
+
+    public void testNearestRoot_concreteNewsUnderCommandRoot_isNewsNotCommand() {
+        myFixture.copyDirectoryToProject("nearestRoot", "");
+
+        KoTEARootsIndex index = new KoTEARootsIndex(
+                Set.of("nr.NrEvent"), Set.of("nr.NrCommand"), Set.of("nr.NrNews"));
+
+        ReadAction.run(() -> {
+            assertFalse("Concrete News under NewsRoot : CommandRoot is not a Command",
+                    index.isCommand(findClass("nr.NrShown")));
+            assertTrue("Concrete News is classified by its nearer News Root",
+                    index.isNews(findClass("nr.NrShown")));
+
+            assertTrue("Concrete Command directly under the Command Root is unaffected",
+                    index.isCommand(findClass("nr.NrLoad")));
+            assertFalse("Concrete Command is not a News", index.isNews(findClass("nr.NrLoad")));
         });
     }
 
