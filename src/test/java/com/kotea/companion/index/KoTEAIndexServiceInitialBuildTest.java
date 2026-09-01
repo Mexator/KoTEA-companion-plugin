@@ -10,7 +10,10 @@ public class KoTEAIndexServiceInitialBuildTest extends KoTEAFixtureTestCase {
         KoTEARootsIndex index = openFixtureProject("featureUpdate");
 
         assertEquals(
-                new KoTEARootsIndex(Set.of("feature.FeatureEvent"), Set.of("feature.FeatureCommand")),
+                new KoTEARootsIndex(
+                        Set.of("feature.FeatureEvent"),
+                        Set.of("feature.FeatureCommand"),
+                        Set.of("feature.FeatureNews")),
                 index);
     }
 }

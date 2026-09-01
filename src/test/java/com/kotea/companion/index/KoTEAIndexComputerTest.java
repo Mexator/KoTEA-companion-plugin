@@ -44,7 +44,8 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(byFile.values());
         assertEquals(
-                new KoTEARootsIndex(Set.of("intermediate.ProfileEvent"), Set.of("intermediate.ProfileCommand")),
+                new KoTEARootsIndex(
+                        Set.of("intermediate.ProfileEvent"), Set.of("intermediate.ProfileCommand"), Set.of()),
                 index);
     }
 
@@ -57,6 +58,7 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         UpdateRecord record = recordFor(byFile, "nothingnews.NothingNewsUpdate");
         assertEquals("nothingnews.NnEvent", record.eventRootFqn());
         assertEquals("nothingnews.NnCommand", record.commandRootFqn());
+        assertNull("Nothing bound to News yields no News Root", record.newsRootFqn());
     }
 
     public void testComputeAll_newsIsNothing_directUpdateImplementation_eventAndCommandRootsStillResolve() {
@@ -69,9 +71,10 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         assertEmpty(record.updateAncestorFqns());
         assertEquals("bare.BareEvent", record.eventRootFqn());
         assertEquals("bare.BareCommand", record.commandRootFqn());
+        assertNull("Nothing bound to News yields no News Root", record.newsRootFqn());
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(byFile.values());
-        assertEquals(new KoTEARootsIndex(Set.of("bare.BareEvent"), Set.of("bare.BareCommand")), index);
+        assertEquals(new KoTEARootsIndex(Set.of("bare.BareEvent"), Set.of("bare.BareCommand"), Set.of()), index);
     }
 
     public void testComputeForFile_matchesComputeAll_withTypealiasedAndAliasImportedRoots() {

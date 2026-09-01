@@ -1,29 +1,19 @@
 package com.kotea.companion.index;
 
-import com.intellij.codeInsight.daemon.GutterMark;
-import com.intellij.codeInsight.daemon.LineMarkerInfo;
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.VfsTestUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
-import com.kotea.companion.util.PluginIcons;
-import org.jetbrains.kotlin.psi.KtClassOrObject;
 
-import javax.swing.Icon;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
 
     private static final KoTEARootsIndex BASELINE = new KoTEARootsIndex(
             Set.of("feat1.Feat1Event", "feat2.Feat2Event"),
-            Set.of("feat1.Feat1Command", "feat2.Feat2Command"));
+            Set.of("feat1.Feat1Command", "feat2.Feat2Command"),
+            Set.of("feat1.Feat1News", "feat2.Feat2News"));
 
     public void testBodyOnlyEdit_leavesSnapshotUntouched() {
         openFixtureProject("indexRebuild");
@@ -45,7 +35,8 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
         assertEquals(
                 new KoTEARootsIndex(
                         Set.of("feat1.Feat1EventAlt", "feat2.Feat2Event"),
-                        Set.of("feat1.Feat1Command", "feat2.Feat2Command")
+                        Set.of("feat1.Feat1Command", "feat2.Feat2Command"),
+                        Set.of("feat1.Feat1News", "feat2.Feat2News")
                 ),
                 getKoTEAIndex()
         );
@@ -79,7 +70,8 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
 
         assertEquals(new KoTEARootsIndex(
                         Set.of("feat1.Feat1Event", "feat2.Feat2Event", "feat3.Feat3Event"),
-                        Set.of("feat1.Feat1Command", "feat2.Feat2Command", "feat3.Feat3Command")),
+                        Set.of("feat1.Feat1Command", "feat2.Feat2Command", "feat3.Feat3Command"),
+                        Set.of("feat1.Feat1News", "feat2.Feat2News", "feat3.Feat3News")),
                 getKoTEAIndex());
         assertEquals("the new feature's Concrete Event / Command did not get gutters",
                 Set.of("Feat3Tapped", "Feat3Send"), koTEAGutterOwners("feat3/Feat3.kt"));
@@ -92,7 +84,8 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
         deleteTempFile("feat2/Feat2Update.kt");
         awaitIndexIdle();
 
-        assertEquals(new KoTEARootsIndex(Set.of("feat1.Feat1Event"), Set.of("feat1.Feat1Command")), getKoTEAIndex());
+        assertEquals(new KoTEARootsIndex(Set.of("feat1.Feat1Event"), Set.of("feat1.Feat1Command"),
+                Set.of("feat1.Feat1News")), getKoTEAIndex());
     }
 
     public void testDeleteUnrelatedContentFile_leavesSnapshotUntouched() {
@@ -116,20 +109,22 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
 
         assertEquals(new KoTEARootsIndex(
                         Set.of("feat1.Feat1EventAlt2", "feat2.Feat2Event"),
-                        Set.of("feat1.Feat1Command", "feat2.Feat2Command")),
+                        Set.of("feat1.Feat1Command", "feat2.Feat2Command"),
+                        Set.of("feat1.Feat1News", "feat2.Feat2News")),
                 getKoTEAIndex());
     }
 
     public void testTypealiasedRoot_retargetedThroughTheAlias_movesTheSnapshot() {
         openFixtureProject("typealiasImport");
         KoTEARootsIndex aliased = new KoTEARootsIndex(
-                Set.of("alias.RealEvent"), Set.of("alias.contract.RealCommand"));
+                Set.of("alias.RealEvent"), Set.of("alias.contract.RealCommand"), Set.of("alias.AliasNews"));
         assertEquals(aliased, getKoTEAIndex());
 
         patchFixture("alias/AliasUpdate.kt", "= RealEvent", "= RealEvent2");
         awaitIndexIdle();
 
-        assertEquals(new KoTEARootsIndex(Set.of("alias.RealEvent2"), Set.of("alias.contract.RealCommand")),
+        assertEquals(new KoTEARootsIndex(Set.of("alias.RealEvent2"), Set.of("alias.contract.RealCommand"),
+                        Set.of("alias.AliasNews")),
                 getKoTEAIndex());
     }
 
@@ -148,11 +143,7 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
     }
 
     /**
-     * Applies a literal find/replace to a fixture file already copied into the project, saves it via
-     * the VFS (disk and memory stay in sync) and reparses PSI. Fails if {@code target} is absent, so
-     * an edit whose anchor a fixture rename removed can't silently turn into a no-op. The fixture
-     * files stay real, compilable Kotlin - the only templated hole is the {@code body} comment marker
-     * in {@code Feat1Update.kt}.
+     * Replaces <b>target</b> with <b>replacement</b> in <b>relativePath</b> and reindexes the file.
      */
     private void patchFixture(String relativePath, String target, String replacement) {
         VirtualFile file = myFixture.findFileInTempDir(relativePath);
@@ -165,35 +156,5 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
     private void deleteTempFile(String relativePath) {
         VirtualFile file = myFixture.findFileInTempDir(relativePath);
         VfsTestUtil.deleteFile(file);
-    }
-
-    /**
-     * Simple names of the classes in {@code relativePath} whose declaration carries an Emission/Processing gutter.
-     */
-    private Set<String> koTEAGutterOwners(String relativePath) {
-        PsiFile file = myFixture.configureFromTempProjectFile(relativePath);
-        List<GutterMark> gutters = ContainerUtil.filter(myFixture.findAllGutters(), KoTEAIndexRebuildTest::isKoTEAGutter);
-
-        Set<String> owners = new HashSet<>();
-        for (KtClassOrObject cls : PsiTreeUtil.findChildrenOfType(file, KtClassOrObject.class)) {
-            PsiElement nameId = cls.getNameIdentifier();
-            if (nameId == null) continue;
-            int offset = nameId.getTextRange().getStartOffset();
-            if (ContainerUtil.exists(gutters, gutter -> markerCovers(gutter, offset))) {
-                owners.add(cls.getName());
-            }
-        }
-        return owners;
-    }
-
-    private static boolean isKoTEAGutter(GutterMark gutter) {
-        Icon icon = gutter.getIcon();
-        return icon == PluginIcons.EMISSION || icon == PluginIcons.PROCESSING;
-    }
-
-    private static boolean markerCovers(GutterMark gutter, int offset) {
-        if (!(gutter instanceof LineMarkerInfo.LineMarkerGutterIconRenderer<?> renderer)) return false;
-        PsiElement element = renderer.getLineMarkerInfo().getElement();
-        return element != null && element.getTextRange() != null && element.getTextRange().containsOffset(offset);
     }
 }

@@ -10,9 +10,9 @@ way (emission) versus the other (processing).
 
 **Update interface**:
 KoTEA's `ru.tinkoff.kotea.core.Update`, whose four type parameters — `<State, Event, Command,
-News>` — declare what a feature's Events and Commands are. Everything the plugin knows about a
-project is derived from this declaration. Note that features usually reach it through KoTEA's
-`DslUpdate` rather than implementing it directly.
+News>` — declare what a feature's Events, Commands, and News are. Everything the plugin knows
+about a project is derived from this declaration. Note that features usually reach it through
+KoTEA's `DslUpdate` rather than implementing it directly.
 
 **Feature Update**:
 A project's own class implementing the Update interface for a single feature — and, where a
@@ -32,23 +32,35 @@ _Avoid_: Base Event, event base class, root event class
 The same, for the `Command` type parameter.
 _Avoid_: Base Command, command base class
 
+**News Root**:
+The same, for the `News` type parameter. Zero or one per feature — a feature that emits no
+News binds `Nothing` here.
+_Avoid_: Base News, news base class
+
 **Concrete Event**:
 A descendant of an Event Root that is neither an interface nor abstract — so Kotlin `object`s,
 `data class`es, and `open class`es qualify, while `sealed` and `abstract` intermediates do not.
-This is the unit the plugin navigates to and from.
+This is the unit the plugin navigates to and from. When a class descends from more than one
+Root, which Root governs it is a classification decision, not a matter of language — see
+`docs/adr/0002-nearest-root.md`.
 _Avoid_: leaf event, event case, event variant, event class
 
 **Concrete Command**:
 The same, for a Command Root.
 _Avoid_: leaf command, command case, command class
 
+**Concrete News**:
+The same, for a News Root, except that News navigation is not yet implemented, so a Concrete
+News is not currently Navigable.
+_Avoid_: leaf news, news case, news class
+
 ### Navigation
 
 **Navigable**:
 Of a class: the plugin offers gutter icons and keyboard navigation for it. Concrete Events and
-Concrete Commands are navigable; Event Roots, Command Roots, and abstract intermediates are
-not. Non-navigability is deliberate — a base class would resolve to many targets at once, and
-the plugin exists to avoid that ambiguity.
+Concrete Commands are navigable; Event Roots, Command Roots, News Roots, Concrete News, and
+abstract intermediates are not. Non-navigability is deliberate — a base class would resolve to
+many targets at once, and the plugin exists to avoid that ambiguity.
 
 **Emission**:
 A site where a Concrete Event or Concrete Command is constructed and dispatched — the place it

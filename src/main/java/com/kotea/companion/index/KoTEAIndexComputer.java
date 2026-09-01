@@ -119,14 +119,16 @@ public final class KoTEAIndexComputer {
 
         Set<String> eventRootFqns = new HashSet<>();
         Set<String> commandRootFqns = new HashSet<>();
+        Set<String> newsRootFqns = new HashSet<>();
         for (UpdateRecord record : all) {
             boolean isFeatureUpdate = record.fqn() == null || !updateAncestorFqns.contains(record.fqn());
             if (!isFeatureUpdate) continue;
 
             if (record.eventRootFqn() != null) eventRootFqns.add(record.eventRootFqn());
             if (record.commandRootFqn() != null) commandRootFqns.add(record.commandRootFqn());
+            if (record.newsRootFqn() != null) newsRootFqns.add(record.newsRootFqn());
         }
-        return new KoTEARootsIndex(eventRootFqns, commandRootFqns);
+        return new KoTEARootsIndex(eventRootFqns, commandRootFqns, newsRootFqns);
     }
 
     @Nullable
@@ -140,20 +142,23 @@ public final class KoTEAIndexComputer {
         PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(updateClass, psiClass, PsiSubstitutor.EMPTY);
         PsiClass eventClass = resolveClassArg(substitutor.substitute(params[1]));
         PsiClass commandClass = resolveClassArg(substitutor.substitute(params[2]));
+        PsiClass newsClass = params.length > 3 ? resolveClassArg(substitutor.substitute(params[3])) : null;
 
         // kotlinc cannot encode a JVM generic signature with `Nothing`
         // Fall back to reading the type arguments straight out of Kotlin source
-        if (eventClass == null || commandClass == null) {
-            PsiClass[] fromSource = resolveEventAndCommandFromKotlinSource(psiClass, updateClass);
+        if (eventClass == null || commandClass == null || newsClass == null) {
+            PsiClass[] fromSource = resolveRootsFromKotlinSource(psiClass, updateClass);
             if (eventClass == null) eventClass = fromSource[0];
             if (commandClass == null) commandClass = fromSource[1];
+            if (newsClass == null) newsClass = fromSource[2];
         }
 
         return new UpdateRecord(
                 psiClass.getQualifiedName(),
                 collectUpdateAncestorFqns(psiClass, updateClass),
                 eventClass != null ? eventClass.getQualifiedName() : null,
-                commandClass != null ? commandClass.getQualifiedName() : null);
+                commandClass != null ? commandClass.getQualifiedName() : null,
+                newsRootFqnOf(newsClass));
     }
 
     /**
@@ -176,8 +181,17 @@ public final class KoTEAIndexComputer {
         return type instanceof PsiClassType classType ? classType.resolve() : null;
     }
 
-    private static PsiClass[] resolveEventAndCommandFromKotlinSource(PsiClass leaf, PsiClass updateClass) {
-        PsiClass[] result = new PsiClass[2];
+    /** {@code Nothing} bound to {@code News} means the feature emits no News, so there is no News Root. */
+    @Nullable
+    private static String newsRootFqnOf(@Nullable PsiClass newsClass) {
+        if (newsClass == null) return null;
+        String fqn = newsClass.getQualifiedName();
+        return "kotlin.Nothing".equals(fqn) ? null : fqn;
+    }
+
+    /** @return {@code [Event, Command, News]} Root classes read straight out of Kotlin source; entries may be null. */
+    private static PsiClass[] resolveRootsFromKotlinSource(PsiClass leaf, PsiClass updateClass) {
+        PsiClass[] result = new PsiClass[3];
         if (!(leaf instanceof KtLightClass lightClass)) return result;
         KtClassOrObject ktClass = lightClass.getKotlinOrigin();
         if (ktClass == null) return result;
@@ -195,6 +209,7 @@ public final class KoTEAIndexComputer {
 
             result[0] = resolveTypeArgumentClass(typeArgs.get(1));
             result[1] = resolveTypeArgumentClass(typeArgs.get(2));
+            if (typeArgs.size() > 3) result[2] = resolveTypeArgumentClass(typeArgs.get(3));
             return result;
         }
         return result;
