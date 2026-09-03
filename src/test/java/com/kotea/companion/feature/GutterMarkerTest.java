@@ -1,6 +1,11 @@
 package com.kotea.companion.feature;
 
 import com.intellij.codeInsight.daemon.GutterMark;
+import com.intellij.codeInsight.daemon.LineMarkerInfo;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.EditorFactory;
+import com.intellij.openapi.editor.EditorKind;
+import com.intellij.openapi.editor.markup.MarkupEditorFilter;
 import com.intellij.util.containers.ContainerUtil;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 import com.kotea.companion.util.PluginIcons;
@@ -39,6 +44,27 @@ public class GutterMarkerTest extends KoTEAFixtureTestCase {
 
         assertEquals(Set.of("NrLoad"), gutters.keySet());
         assertEquals(Set.of(PluginIcons.EMISSION, PluginIcons.PROCESSING), gutters.get("NrLoad"));
+    }
+
+    public void testKoTEAGuttersAreHiddenInDiffViewersButNotInNormalEditors() {
+        myFixture.configureFromTempProjectFile("cov/Events.kt");
+        List<GutterMark> koTEAGutters = ContainerUtil.filter(myFixture.findAllGutters(), KoTEAFixtureTestCase::isKoTEAGutter);
+        assertFalse("fixture is expected to carry KoTEA gutters", koTEAGutters.isEmpty());
+
+        EditorFactory editorFactory = EditorFactory.getInstance();
+        Editor diffEditor = editorFactory.createViewer(myFixture.getEditor().getDocument(), getProject(), EditorKind.DIFF);
+        Editor mainEditor = editorFactory.createViewer(myFixture.getEditor().getDocument(), getProject(), EditorKind.MAIN_EDITOR);
+
+        try {
+            for (GutterMark gutter : koTEAGutters) {
+                MarkupEditorFilter filter = ((LineMarkerInfo.LineMarkerGutterIconRenderer<?>) gutter).getLineMarkerInfo().getEditorFilter();
+                assertFalse("KoTEA gutter must not render in a diff viewer", filter.avaliableIn(diffEditor));
+                assertTrue("KoTEA gutter must still render in a normal editor", filter.avaliableIn(mainEditor));
+            }
+        } finally {
+            editorFactory.releaseEditor(diffEditor);
+            editorFactory.releaseEditor(mainEditor);
+        }
     }
 
     private boolean fileHasKoTEAGutter(String relativePath) {

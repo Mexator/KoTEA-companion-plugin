@@ -25,6 +25,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.KoTEAElementKind;
+import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.RoleResolver;
@@ -146,7 +147,7 @@ public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
             });
         };
 
-        return new RelatedItemLineMarkerInfo<>(element, element.getTextRange(), icon, elt -> "Go to " + title, navHandler,
+        return new KoteaCompanionLineMarkerInfo<>(element, element.getTextRange(), icon, elt -> "Go to " + title, navHandler,
                 GutterIconRenderer.Alignment.CENTER, () -> List.of());
     }
 
