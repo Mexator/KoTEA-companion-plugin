@@ -22,6 +22,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
@@ -198,7 +199,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
             });
         };
 
-        return new RelatedItemLineMarkerInfo<>(
+        return new KoteaCompanionLineMarkerInfo<>(
                 anchor,
                 anchor.getTextRange(),
                 icon,

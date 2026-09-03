@@ -69,6 +69,7 @@ intellijPlatform {
                 <li><b>1.2.2</b>
                     <ul>
                         <li>An Event reference in a KDoc comment is no longer treated as an emission site</li>
+                        <li>Emission/Processing gutter icons are no longer shown in the diff viewer</li>
                     </ul>
                 </li>
             </ul>
