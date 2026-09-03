@@ -24,8 +24,10 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
+import com.kotea.companion.util.RoleResolver;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
@@ -78,13 +80,14 @@ public class EventMarkerProvider extends RelatedItemLineMarkerProvider {
         if (targetClass == null || !EventUtil.isNavigableEventClass(targetClass)) return;
 
         boolean isDeclaration = element.getParent() == targetClass;
-        boolean isInsideUpdateFile = element.getContainingFile().getName().contains("Update");
+        boolean atProcessingSite = RoleResolver.roleOf(element, KoTEAElementKind.EVENT)
+                == RoleResolver.Role.PROCESSING;
 
-        if (isDeclaration || isInsideUpdateFile) {
+        if (isDeclaration || atProcessingSite) {
             result.add(createMarker(element, targetClass, PluginIcons.EMISSION, "Emission", EventEmissionSearcher::findEmissions));
         }
 
-        if (!isInsideUpdateFile || isDeclaration) {
+        if (isDeclaration || !atProcessingSite) {
             result.add(createMarker(element, targetClass, PluginIcons.PROCESSING, "Processing", EventProcessingSearcher::findProcessing));
         }
 

@@ -17,7 +17,8 @@ import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.util.ContextPresentationProvider;
-import com.kotea.companion.util.KoTEAUtil;
+import com.kotea.companion.util.NavigableElement;
+import com.kotea.companion.util.NavigableElementResolver;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
@@ -29,11 +30,7 @@ public abstract class BaseGoToAction extends AnAction {
 
     private static final Logger LOG = Logger.getInstance(BaseGoToAction.class);
 
-    protected abstract List<PsiElement> findTargets(PsiElement targetClass, GlobalSearchScope scope);
-
-    protected PsiElement findTargetClass(PsiElement element) {
-        return KoTEAUtil.tryResolveToKoTEAClass(element);
-    }
+    protected abstract List<PsiElement> findTargets(NavigableElement target, GlobalSearchScope scope);
 
     protected abstract String getTitle();
 
@@ -45,27 +42,27 @@ public abstract class BaseGoToAction extends AnAction {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         if (editor == null || element == null) return;
 
-        PsiElement targetClass = findTargetClass(element);
-        if (targetClass == null) return;
+        NavigableElement target = NavigableElementResolver.resolve(element);
+        if (target == null) return;
 
         GlobalSearchScope scope = ScopeBuilder.getProductionScope(element);
-        executeSearch(editor, targetClass, scope);
+        executeSearch(editor, target, scope);
     }
 
-    private void executeSearch(Editor editor, PsiElement targetClass, GlobalSearchScope scope) {
-        String lockKey = lockKey(targetClass);
+    private void executeSearch(Editor editor, NavigableElement target, GlobalSearchScope scope) {
+        String lockKey = lockKey(target.anchor());
         if (!SearchLock.tryLock(lockKey)) {
             HintManager.getInstance().showInformationHint(editor, "Search already in progress");
             return;
         }
 
-        ProgressManager.getInstance().run(new Task.Backgroundable(targetClass.getProject(), getTitle(), true) {
+        ProgressManager.getInstance().run(new Task.Backgroundable(target.anchor().getProject(), getTitle(), true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
                 indicator.setIndeterminate(true);
                 try {
                     long start = PerfLog.start();
-                    List<PsiElement> targets = ReadAction.compute(() -> findTargets(targetClass, scope));
+                    List<PsiElement> targets = ReadAction.compute(() -> findTargets(target, scope));
                     PerfLog.logElapsed(LOG, getOperation() + " search", start);
                     if (indicator.isCanceled()) return;
 

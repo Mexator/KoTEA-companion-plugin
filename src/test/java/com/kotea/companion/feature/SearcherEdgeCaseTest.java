@@ -16,6 +16,8 @@ import org.jetbrains.uast.UClass;
 import org.jetbrains.uast.UastContextKt;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
 
@@ -29,7 +31,7 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
         List<PsiElement> targets = eventEmissions("ItemTapped");
 
         assertEquals(
-                List.of(
+                Set.of(
                         "EdgesScreen.kt:14  ItemTapped(id)",
                         "EdgesScreen.kt:15  ItemTapped(id + 1)"),
                 locationsOf(targets));
@@ -39,7 +41,7 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
         List<PsiElement> targets = commandEmission("LoadPage");
 
         assertEquals(
-                List.of(
+                Set.of(
                         "EdgesUpdate.kt:10  LoadPage(event.id)",
                         "EdgesUpdate.kt:11  LoadPage(event.id + 1)"),
                 locationsOf(targets));
@@ -61,13 +63,13 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
     /**
      * {@code file:line  <enclosing call>} for each target
      */
-    private static List<String> locationsOf(List<PsiElement> targets) {
+    private static Set<String> locationsOf(List<PsiElement> targets) {
         return ReadAction.compute(() -> targets.stream().map(target -> {
             PsiFile file = target.getContainingFile();
             Document document = file.getViewProvider().getDocument();
             int line = document.getLineNumber(target.getTextRange().getStartOffset()) + 1;
             KtCallExpression call = PsiTreeUtil.getParentOfType(target, KtCallExpression.class);
             return file.getName() + ":" + line + "  " + (call != null ? call.getText() : target.getText());
-        }).toList());
+        }).collect(Collectors.toSet()));
     }
 }

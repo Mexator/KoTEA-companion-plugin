@@ -1,16 +1,16 @@
 package com.kotea.companion.events;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
+import com.kotea.companion.util.RoleResolver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtImportDirective;
@@ -36,19 +36,13 @@ public class EventEmissionSearcher {
     }
 
     private static List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
-        GlobalSearchScope emissionScope = new DelegatingGlobalSearchScope(scope) {
-            @Override
-            public boolean contains(@NotNull VirtualFile file) {
-                return super.contains(file) && !file.getName().contains("Update");
-            }
-        };
-
         long start = PerfLog.start();
         List<PsiElement> emissionPlaces = new ArrayList<>();
-        for (var ref : ReferencesSearch.search(target, emissionScope, false).findAll()) {
+        for (var ref : ReferencesSearch.search(target, scope, false).findAll()) {
             PsiElement el = ref.getElement();
             if (PsiTreeUtil.getParentOfType(el, KtImportDirective.class) != null) continue;
             if (PsiTreeUtil.getParentOfType(el, KtTypeReference.class) != null) continue;
+            if (RoleResolver.roleOf(el, KoTEAElementKind.EVENT) != RoleResolver.Role.EMISSION) continue;
             emissionPlaces.add(el);
         }
         PerfLog.logSearch(LOG, "EventEmissionSearcher", target.getName(), emissionPlaces.size(), start);

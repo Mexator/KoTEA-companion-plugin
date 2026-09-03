@@ -4,8 +4,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.commands.CommandProcessingSearcher;
 import com.kotea.companion.events.EventProcessingSearcher;
-import com.kotea.companion.events.EventUtil;
-import com.kotea.companion.commands.CommandUtil;
+import com.kotea.companion.util.NavigableElement;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.UClass;
 import org.jetbrains.uast.UastContextKt;
@@ -15,19 +14,15 @@ import java.util.List;
 public class GoToProcessingAction extends BaseGoToAction {
 
     @Override
-    protected List<PsiElement> findTargets(PsiElement targetElement, GlobalSearchScope scope) {
-        if (!(targetElement instanceof KtClassOrObject targetClass)) return List.of();
-
-        if (EventUtil.isNavigableEventClass(targetClass)) {
-            return EventProcessingSearcher.findProcessing(targetClass, scope);
-        }
-
-        if (CommandUtil.isNavigableCommand(targetClass)) {
-            UClass uClass = UastContextKt.toUElement(targetClass, UClass.class);
-            return uClass != null ? CommandProcessingSearcher.findProcessing(uClass, scope) : List.of();
-        }
-
-        return List.of();
+    protected List<PsiElement> findTargets(NavigableElement target, GlobalSearchScope scope) {
+        KtClassOrObject anchor = target.anchor();
+        return switch (target.kind()) {
+            case EVENT -> EventProcessingSearcher.findProcessing(anchor, scope);
+            case COMMAND -> {
+                UClass uClass = UastContextKt.toUElement(anchor, UClass.class);
+                yield uClass != null ? CommandProcessingSearcher.findProcessing(uClass, scope) : List.of();
+            }
+        };
     }
 
     @Override
@@ -37,6 +32,6 @@ public class GoToProcessingAction extends BaseGoToAction {
 
     @Override
     protected String getOperation() {
-        return "Processing";
+        return "Go to processing sites";
     }
 }

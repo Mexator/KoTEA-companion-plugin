@@ -1,16 +1,16 @@
 package com.kotea.companion.commands;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.DelegatingGlobalSearchScope;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
+import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
+import com.kotea.companion.util.RoleResolver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.uast.*;
 
@@ -34,21 +34,15 @@ public class CommandEmissionSearcher {
     }
 
     private static List<PsiElement> search(@NotNull UClass uClass, GlobalSearchScope scope) {
-        GlobalSearchScope emissionScope = new DelegatingGlobalSearchScope(scope) {
-            @Override
-            public boolean contains(@NotNull VirtualFile file) {
-                return super.contains(file) && !file.getName().contains("Handler");
-            }
-        };
-
         long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
         PsiClass psiClass = uClass.getJavaPsi();
 
-        ReferencesSearch.search(psiClass, emissionScope).forEach(usage -> {
+        ReferencesSearch.search(psiClass, scope).forEach(usage -> {
             PsiElement element = usage.getElement();
             UElement uElement = UastContextKt.toUElement(element, UElement.class);
             if (uElement == null) return true;
+            if (RoleResolver.roleOf(element, KoTEAElementKind.COMMAND) != RoleResolver.Role.EMISSION) return true;
 
             if (UastUtils.getParentOfType(uElement, UImportStatement.class) != null) return true;
             if (UastUtils.getParentOfType(uElement, UTypeReferenceExpression.class) != null ||
