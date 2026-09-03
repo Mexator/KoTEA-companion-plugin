@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.2.1"
+version = "1.2.2"
 
 repositories {
     mavenCentral()
@@ -66,9 +66,9 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.2.1</b>
+                <li><b>1.2.2</b>
                     <ul>
-                        <li>News that extend Commands are not considered as Commands</li>
+                        <li>An Event reference in a KDoc comment is no longer treated as an emission site</li>
                     </ul>
                 </li>
             </ul>

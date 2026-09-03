@@ -37,7 +37,27 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
                 locationsOf(targets));
     }
 
+    public void testEventEmissionIgnoresKDocLinks() {
+        List<PsiElement> targets = eventEmissions("ItemTapped");
+
+        assertEquals(
+                Set.of(
+                        "EdgesScreen.kt:14  ItemTapped(id)",
+                        "EdgesScreen.kt:15  ItemTapped(id + 1)"),
+                locationsOf(targets));
+    }
+
     public void testCommandEmissionResolvesEveryCommandsCall() {
+        List<PsiElement> targets = commandEmission("LoadPage");
+
+        assertEquals(
+                Set.of(
+                        "EdgesUpdate.kt:10  LoadPage(event.id)",
+                        "EdgesUpdate.kt:11  LoadPage(event.id + 1)"),
+                locationsOf(targets));
+    }
+
+    public void testCommandEmissionIgnoresKDocLinks() {
         List<PsiElement> targets = commandEmission("LoadPage");
 
         assertEquals(

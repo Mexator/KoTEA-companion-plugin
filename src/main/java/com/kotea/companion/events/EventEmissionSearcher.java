@@ -12,6 +12,7 @@ import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.RoleResolver;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.kotlin.psi.KtImportDirective;
 import org.jetbrains.kotlin.psi.KtTypeReference;
@@ -42,6 +43,7 @@ public class EventEmissionSearcher {
             PsiElement el = ref.getElement();
             if (PsiTreeUtil.getParentOfType(el, KtImportDirective.class) != null) continue;
             if (PsiTreeUtil.getParentOfType(el, KtTypeReference.class) != null) continue;
+            if (PsiTreeUtil.getParentOfType(el, KDoc.class) != null) continue;
             if (RoleResolver.roleOf(el, KoTEAElementKind.EVENT) != RoleResolver.Role.EMISSION) continue;
             emissionPlaces.add(el);
         }
