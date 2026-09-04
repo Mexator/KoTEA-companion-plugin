@@ -5,9 +5,7 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
-import com.intellij.psi.util.CachedValueProvider;
-import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.PsiModificationTracker;
+import com.kotea.companion.util.CachingSearcher;
 import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.RoleResolver;
@@ -16,24 +14,26 @@ import org.jetbrains.uast.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-public class CommandEmissionSearcher {
+public class CommandEmissionSearcher extends CachingSearcher<UClass> {
 
     private static final Logger LOG = Logger.getInstance(CommandEmissionSearcher.class);
+    private static final CommandEmissionSearcher INSTANCE = new CommandEmissionSearcher();
 
-    public static List<PsiElement> findEmission(@NotNull UClass uClass, GlobalSearchScope scope) {
-        Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(uClass.getJavaPsi(),
-                ()-> {
-                    Map<GlobalSearchScope, List<PsiElement>> map = new ConcurrentHashMap<>();
-                    return CachedValueProvider.Result.create(map, PsiModificationTracker.MODIFICATION_COUNT);
-                } );
-
-        return scopeMap.computeIfAbsent(scope, s -> search(uClass, s));
+    private CommandEmissionSearcher() {
     }
 
-    private static List<PsiElement> search(@NotNull UClass uClass, GlobalSearchScope scope) {
+    public static List<PsiElement> findEmission(@NotNull UClass uClass, GlobalSearchScope scope) {
+        return INSTANCE.findCached(uClass, scope);
+    }
+
+    @Override
+    protected PsiElement cacheKeyOf(@NotNull UClass target) {
+        return target.getJavaPsi();
+    }
+
+    @Override
+    protected List<PsiElement> search(@NotNull UClass uClass, @NotNull GlobalSearchScope scope) {
         long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
         PsiClass psiClass = uClass.getJavaPsi();

@@ -4,10 +4,8 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
-import com.intellij.psi.util.CachedValueProvider;
-import com.intellij.psi.util.CachedValuesManager;
-import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.kotea.companion.util.CachingSearcher;
 import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.RoleResolver;
@@ -19,24 +17,26 @@ import org.jetbrains.kotlin.psi.KtParameter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-public class NewsProcessingSearcher {
+public class NewsProcessingSearcher extends CachingSearcher<KtClassOrObject> {
 
     private static final Logger LOG = Logger.getInstance(NewsProcessingSearcher.class);
+    private static final NewsProcessingSearcher INSTANCE = new NewsProcessingSearcher();
 
-    public static List<PsiElement> findProcessing(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
-        Map<GlobalSearchScope, List<PsiElement>> scopeMap = CachedValuesManager.getCachedValue(target,
-                () -> {
-                    Map<GlobalSearchScope, List<PsiElement>> map = new ConcurrentHashMap<>();
-                    return CachedValueProvider.Result.create(map, PsiModificationTracker.MODIFICATION_COUNT);
-                });
-
-        return scopeMap.computeIfAbsent(scope, s -> search(target, s));
+    private NewsProcessingSearcher() {
     }
 
-    private static List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
+    public static List<PsiElement> findProcessing(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
+        return INSTANCE.findCached(target, scope);
+    }
+
+    @Override
+    protected PsiElement cacheKeyOf(@NotNull KtClassOrObject target) {
+        return target;
+    }
+
+    @Override
+    protected List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
         long start = PerfLog.start();
         List<PsiElement> results = new ArrayList<>();
         for (var ref : ReferencesSearch.search(target, scope, false).findAll()) {

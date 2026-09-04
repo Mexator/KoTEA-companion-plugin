@@ -84,6 +84,17 @@ public class NavigationTest extends KoTEAFixtureTestCase {
         assertGutterLandsOn("cov/Commands.kt", "LoadItems", PluginIcons.PROCESSING, expected);
     }
 
+    public void testEventEmissionThenProcessing_onSameTargetDoNotCollide() {
+        KtClassOrObject target = ktClass("cov/Events.kt", "ItemClicked");
+        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
+
+        Site emission = ReadAction.compute(() -> siteOf(single(EventEmissionSearcher.findEmissions(target, scope))));
+        Site processing = ReadAction.compute(() -> siteOf(single(EventProcessingSearcher.findProcessing(target, scope))));
+
+        assertEquals("CovViewModel.kt", emission.file());
+        assertEquals("CovUpdate.kt", processing.file());
+    }
+
     public void testNewsEmission() {
         Site expected = singleSearcherTarget("cov/News.kt", "ShowError",
                 NewsEmissionSearcher::findEmissions);
@@ -225,5 +236,10 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     private static String iconName(Icon icon) {
         return icon == PluginIcons.EMISSION ? "Emission" : "Processing";
+    }
+
+    private static PsiElement single(List<PsiElement> targets) {
+        assertEquals(1, targets.size());
+        return targets.getFirst();
     }
 }
