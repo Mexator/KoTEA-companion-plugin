@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.2.2"
+version = "1.3.0"
 
 repositories {
     mavenCentral()
@@ -59,17 +59,14 @@ intellijPlatform {
             sinceBuild = "253"
         }
 
-        description = """
-            <b>KoTEA Companion</b> is an Android Studio plugin designed to improve Developer Experience in projects using the KoTEA architectural pattern.
-            The plugin simplifies navigation by creating a contextual bridge between the points of generation (Emission) and execution (Processing) of Events and Commands.
-        """.trimIndent()
-
         changeNotes = """
             <ul>
-                <li><b>1.2.2</b>
+                <li><b>1.3.0</b>
                     <ul>
-                        <li>An Event reference in a KDoc comment is no longer treated as an emission site</li>
-                        <li>Emission/Processing gutter icons are no longer shown in the diff viewer</li>
+                        <li>Feature: Added navigation for News (to Emission/Processing)</li>
+                        <li>Fix: The KoTEA context menu now only appears on KoTEA elements</li>
+                        <li>Fix: An Event reference in a KDoc comment is no longer treated as an emission site</li>
+                        <li>Fix: Emission/Processing gutter icons are no longer shown in the diff viewer</li>
                     </ul>
                 </li>
             </ul>

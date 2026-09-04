@@ -13,12 +13,12 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        <b>KoTEA Companion</b> is an Android Studio plugin designed to improve Developer Experience in projects using the KoTEA architectural pattern.<br><br>
-        The plugin simplifies navigation by creating a contextual bridge between the points of generation (Emission) and execution (Processing) of Events, Commands, and News.
+        <b>KoTEA Companion</b> is an Android Studio plugin for projects using the KoTEA architectural pattern.
+        It navigates between the parts of a KoTEA feature: Events, Commands, and News.
         <ul>
-            <li><b>Go to emission:</b> Instantly jump to where an event, command, or news item is dispatched.</li>
-            <li><b>Go to processing:</b> Navigate to the Update class, CommandsFlowHandler, or news collector where the logic is handled.</li>
-            <li><b>Interactive Gutter Icons:</b> Quick navigation markers in the editor gutter for declarations, call sites, and handlers.</li>
+            <li><b>Go to emission:</b> jump to where an event, command, or news item is constructed and dispatched.</li>
+            <li><b>Go to processing:</b> jump to the Update class, CommandsFlowHandler, or news collector that consumes it.</li>
+            <li>Gutter icons mark both directions at declarations and reference sites.</li>
         </ul>
     ]]></description>
 
