@@ -48,7 +48,8 @@
     </extensions>
 
     <actions>
-        <group id = "KoTEA.Navigation" text = "KoTEA Navigation" popup="true" icon="AllIcons.Actions.Search">
+        <group id = "KoTEA.Navigation" class="com.kotea.companion.actions.NavigationGroup"
+               text = "KoTEA Navigation" popup="true" icon="AllIcons.Actions.Search">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <action id="Emission"
                     class="com.kotea.companion.actions.GoToEmissionAction"

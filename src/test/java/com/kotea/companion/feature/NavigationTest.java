@@ -20,6 +20,7 @@ import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.TestActionEvent;
 import com.kotea.companion.actions.GoToEmissionAction;
 import com.kotea.companion.actions.GoToProcessingAction;
+import com.kotea.companion.actions.NavigationGroup;
 import com.kotea.companion.commands.CommandEmissionSearcher;
 import com.kotea.companion.commands.CommandProcessingSearcher;
 import com.kotea.companion.events.EventEmissionSearcher;
@@ -79,6 +80,45 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/Commands.kt", "LoadItems", expected);
         assertGutterLandsOn("cov/Commands.kt", "LoadItems", PluginIcons.PROCESSING, expected);
+    }
+
+    public void testActionHiddenOnNonKoteaElement() {
+        PsiFile file = myFixture.configureFromTempProjectFile("cov/CovViewModel.kt");
+        KtClassOrObject decl = findKtClass(file, "CovViewModel");
+
+        assertActionHidden(new GoToEmissionAction(), decl);
+        assertActionHidden(new GoToProcessingAction(), decl);
+        assertActionHidden(new NavigationGroup(), decl);
+    }
+
+    public void testGroupVisibleOnKoteaElement() {
+        KtClassOrObject decl = ktClass("cov/Events.kt", "ItemClicked");
+
+        DataContext context = SimpleDataContext.builder()
+                .add(CommonDataKeys.PROJECT, getProject())
+                .add(CommonDataKeys.EDITOR, myFixture.getEditor())
+                .add(CommonDataKeys.PSI_ELEMENT, decl)
+                .build();
+        AnAction group = new NavigationGroup();
+        AnActionEvent event = TestActionEvent.createTestEvent(group, context);
+
+        group.update(event);
+
+        assertTrue("group should be visible on a KoTEA element", event.getPresentation().isEnabledAndVisible());
+    }
+
+    private void assertActionHidden(AnAction action, PsiElement element) {
+        DataContext context = SimpleDataContext.builder()
+                .add(CommonDataKeys.PROJECT, getProject())
+                .add(CommonDataKeys.EDITOR, myFixture.getEditor())
+                .add(CommonDataKeys.PSI_ELEMENT, element)
+                .build();
+        AnActionEvent event = TestActionEvent.createTestEvent(action, context);
+
+        action.update(event);
+
+        assertFalse("action should be hidden away from a KoTEA element",
+                event.getPresentation().isEnabledAndVisible());
     }
 
     // --- the searcher boundary: exactly one target ---

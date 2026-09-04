@@ -37,6 +37,17 @@ public abstract class BaseGoToAction extends AnAction {
     protected abstract String getOperation();
 
     @Override
+    public void update(@NotNull AnActionEvent e) {
+        e.getPresentation().setEnabledAndVisible(isAvailable(e));
+    }
+
+    static boolean isAvailable(@NotNull AnActionEvent e) {
+        PsiElement element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        return element != null
+                && ReadAction.compute(() -> NavigableElementResolver.resolve(element) != null);
+    }
+
+    @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         PsiElement element = e.getData(CommonDataKeys.PSI_ELEMENT);
         Editor editor = e.getData(CommonDataKeys.EDITOR);
