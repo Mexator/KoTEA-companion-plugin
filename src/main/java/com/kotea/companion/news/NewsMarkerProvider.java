@@ -1,0 +1,176 @@
+package com.kotea.companion.news;
+
+import com.intellij.codeInsight.daemon.GutterIconNavigationHandler;
+import com.intellij.codeInsight.daemon.LineMarkerInfo;
+import com.intellij.codeInsight.daemon.RelatedItemLineMarkerInfo;
+import com.intellij.codeInsight.daemon.RelatedItemLineMarkerProvider;
+import com.intellij.codeInsight.navigation.PsiTargetNavigator;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.markup.GutterIconRenderer;
+import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
+import com.intellij.openapi.ui.MessageType;
+import com.intellij.openapi.ui.popup.Balloon;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.pom.Navigatable;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.impl.source.tree.LeafPsiElement;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.ui.awt.RelativePoint;
+import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.util.KoTEAElementKind;
+import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
+import com.kotea.companion.util.PerfLog;
+import com.kotea.companion.util.PluginIcons;
+import com.kotea.companion.util.RoleResolver;
+import com.kotea.companion.util.ScopeBuilder;
+import com.kotea.companion.util.SearchLock;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.psi.*;
+
+import javax.swing.*;
+import java.awt.event.MouseEvent;
+import java.util.Collection;
+import java.util.List;
+import java.util.function.BiFunction;
+
+public class NewsMarkerProvider extends RelatedItemLineMarkerProvider {
+
+    private static final Logger LOG = Logger.getInstance(NewsMarkerProvider.class);
+
+    @Override
+    public void collectSlowLineMarkers(@NotNull List<? extends PsiElement> elements,
+                                        @NotNull Collection<? super LineMarkerInfo<?>> result) {
+        long start = PerfLog.start();
+        super.collectSlowLineMarkers(elements, result);
+        PerfLog.warnIfSlow(LOG, "NewsMarkerProvider marker collection over " + elements.size()
+                + " elements", start, 100);
+    }
+
+    @Override
+    protected void collectNavigationMarkers(@NotNull PsiElement element,
+                                            @NotNull Collection<? super RelatedItemLineMarkerInfo<?>> result) {
+
+        if (!(element instanceof LeafPsiElement)) return;
+
+        long start = PerfLog.start();
+
+        PsiElement parent = element.getParent();
+        if (parent instanceof KtNameReferenceExpression) {
+            PsiElement grandParent = parent.getParent();
+            if (grandParent instanceof KtDotQualifiedExpression && ((KtDotQualifiedExpression) grandParent).getReceiverExpression() == parent)
+                return;
+
+            if (grandParent instanceof KtUserType) {
+                PsiElement greatGrandParent = grandParent.getParent();
+                if (greatGrandParent instanceof KtUserType && ((KtUserType) greatGrandParent).getQualifier() == grandParent)
+                    return;
+            }
+        }
+
+        if (PsiTreeUtil.getParentOfType(element, KtSuperTypeList.class) != null) return;
+
+        KtClassOrObject targetClass = NewsUtil.tryResolveToClass(element);
+
+        if (targetClass == null || !NewsUtil.isNavigableNewsClass(targetClass)) return;
+
+        boolean isDeclaration = element.getParent() == targetClass;
+        boolean atProcessingSite = RoleResolver.roleOf(element, KoTEAElementKind.NEWS)
+                == RoleResolver.Role.PROCESSING;
+
+        if (isDeclaration || atProcessingSite) {
+            result.add(createMarker(element, targetClass, PluginIcons.EMISSION, "Emission", NewsEmissionSearcher::findEmissions));
+        }
+
+        if (isDeclaration || !atProcessingSite) {
+            result.add(createMarker(element, targetClass, PluginIcons.PROCESSING, "Processing", NewsProcessingSearcher::findProcessing));
+        }
+
+        PerfLog.warnIfSlow(LOG, "NewsMarkerProvider marker collection for element " + element + " is slow", start, 10);
+    }
+
+    private RelatedItemLineMarkerInfo<PsiElement> createMarker(PsiElement element, KtClassOrObject targetClass, Icon icon,
+                                                               String title, BiFunction<KtClassOrObject, GlobalSearchScope, List<PsiElement>> searchFunc) {
+
+        GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) -> {
+            Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
+            if (editor == null) return;
+
+            String fqName = targetClass.getFqName() != null ? targetClass.getFqName().asString() : targetClass.getName();
+            String lockKey = fqName + ":" + title;
+
+            if (!SearchLock.tryLock(lockKey)) {
+                showBalloon(mouseEvent, "Search already in progress", MessageType.INFO);
+                return;
+            }
+
+            ProgressManager.getInstance().run(new Task.Backgroundable(elt.getProject(), "Go to " + title, true) {
+                @Override
+                public void run(@NotNull ProgressIndicator indicator) {
+                    indicator.setIndeterminate(true);
+                    try {
+                        indicator.setText("Searching in module...");
+                        long moduleSearchStart = PerfLog.start();
+                        List<PsiElement> targets = ReadAction.compute(() ->
+                                searchFunc.apply(targetClass, ScopeBuilder.getModuleScope(elt)));
+                        PerfLog.logElapsed(LOG, "NewsMarkerProvider module-scope " + title + " search",
+                                moduleSearchStart);
+
+                        String scope = "module";
+                        if ((targets == null || targets.isEmpty()) && !indicator.isCanceled()) {
+                            indicator.setText("Searching in project...");
+                            long projectSearchStart = PerfLog.start();
+                            targets = ReadAction.compute(() ->
+                                    searchFunc.apply(targetClass, ScopeBuilder.getProductionScope(elt)));
+                            PerfLog.logElapsed(LOG, "NewsMarkerProvider project-scope " + title + " search",
+                                    projectSearchStart);
+                            scope = "project";
+                        }
+
+                        if (indicator.isCanceled()) return;
+
+                        final List<PsiElement> finalTargets = targets != null ? targets : List.of();
+                        final String finalScope = scope;
+                        ApplicationManager.getApplication().invokeLater(() -> {
+                            showResults(finalTargets, title, finalScope, mouseEvent, elt);
+                        });
+                    } finally {
+                        SearchLock.unlock(lockKey);
+                    }
+                }
+            });
+        };
+
+        return new KoteaCompanionLineMarkerInfo<>(element, element.getTextRange(), icon, elt -> "Go to " + title, navHandler,
+                GutterIconRenderer.Alignment.CENTER, () -> List.of());
+    }
+
+    private void showResults(List<PsiElement> targets, String title, String scope, MouseEvent mouseEvent, PsiElement elt) {
+        if (targets.isEmpty()) {
+            showBalloon(mouseEvent, "No " + title.toLowerCase() + " usages found", MessageType.INFO);
+            return;
+        }
+        if (targets.size() == 1) {
+            ((Navigatable) targets.getFirst()).navigate(true);
+        } else {
+            new PsiTargetNavigator<>(targets)
+                    .presentationProvider(ContextPresentationProvider::getPresentation)
+                    .createPopup(elt.getProject(), "Go to " + title + " — " + scope)
+                    .show(new RelativePoint(mouseEvent));
+        }
+    }
+
+    private void showBalloon(MouseEvent mouseEvent, String message, MessageType type) {
+        JBPopupFactory.getInstance()
+                .createHtmlTextBalloonBuilder(message, type, null)
+                .setFadeoutTime(3000)
+                .createBalloon()
+                .show(new RelativePoint(mouseEvent), Balloon.Position.atRight);
+    }
+}

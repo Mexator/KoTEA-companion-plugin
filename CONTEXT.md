@@ -50,29 +50,29 @@ The same, for a Command Root.
 _Avoid_: leaf command, command case, command class
 
 **Concrete News**:
-The same, for a News Root, except that News navigation is not yet implemented, so a Concrete
-News is not currently Navigable.
+The same, for a News Root.
 _Avoid_: leaf news, news case, news class
 
 ### Navigation
 
 **Navigable**:
-Of a class: the plugin offers gutter icons and keyboard navigation for it. Concrete Events and
-Concrete Commands are navigable; Event Roots, Command Roots, News Roots, Concrete News, and
+Of a class: the plugin offers gutter icons and keyboard navigation for it. Concrete Events,
+Concrete Commands, and Concrete News are navigable; Event Roots, Command Roots, News Roots, and
 abstract intermediates are not. Non-navigability is deliberate — a base class would resolve to
 many targets at once, and the plugin exists to avoid that ambiguity.
 
 **Emission**:
-A site where a Concrete Event or Concrete Command is constructed and dispatched — the place it
-comes into being.
+A site where a Concrete Event, Concrete Command, or Concrete News is constructed and
+dispatched — the place it comes into being.
 _Avoid_: dispatch, usage, reference
 
 **Processing**:
-A site where a Concrete Event or Concrete Command is consumed — an Event inside its Feature
-Update, a Command inside its CommandsFlowHandler.
+A site where a Concrete Event, Concrete Command, or Concrete News is consumed — an Event inside
+its Feature Update, a Command inside its CommandsFlowHandler, a News item wherever the Store's
+`news` Flow is collected (a `newsCollector` lambda, conventionally in UI code such as a
+Fragment or Activity).
 _Avoid_: handling, consumption
 
 Emission and Processing are roles, not locations. The plugin currently *approximates* them by
-file name (a reference in a file named `*Update*` is treated as Event processing, `*Handler*`
-as Command processing, anything else as emission), which is an implementation shortcut and not
-what the terms mean.
+various heuristics. For example, a file name: a reference in a file named `*Update*` is treated as Event processing. 
+This is an implementation shortcut and not what the terms mean.

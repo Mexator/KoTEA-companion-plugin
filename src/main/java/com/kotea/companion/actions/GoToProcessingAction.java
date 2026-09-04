@@ -4,6 +4,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.commands.CommandProcessingSearcher;
 import com.kotea.companion.events.EventProcessingSearcher;
+import com.kotea.companion.news.NewsProcessingSearcher;
 import com.kotea.companion.util.NavigableElement;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.UClass;
@@ -18,6 +19,7 @@ public class GoToProcessingAction extends BaseGoToAction {
         KtClassOrObject anchor = target.anchor();
         return switch (target.kind()) {
             case EVENT -> EventProcessingSearcher.findProcessing(anchor, scope);
+            case NEWS -> NewsProcessingSearcher.findProcessing(anchor, scope);
             case COMMAND -> {
                 UClass uClass = UastContextKt.toUElement(anchor, UClass.class);
                 yield uClass != null ? CommandProcessingSearcher.findProcessing(uClass, scope) : List.of();

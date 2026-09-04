@@ -31,19 +31,28 @@ public class GutterMarkerTest extends KoTEAFixtureTestCase {
         assertEquals(Set.of("LoadItems", "Refresh"), koTEAGutterOwners("cov/Commands.kt"));
     }
 
-    public void testGuttersOnEmissionAndProcessingSites() {
-        assertTrue("Event Emission site in CovViewModel.kt", fileHasKoTEAGutter("cov/CovViewModel.kt"));
-        assertTrue("Event Processing + Command Emission sites in CovUpdate.kt",
-                fileHasKoTEAGutter("cov/CovUpdate.kt"));
-        assertTrue("Command Processing site in CovHandler.kt", fileHasKoTEAGutter("cov/CovHandler.kt"));
+    public void testGuttersOnConcreteNewsDeclarationsOnly() {
+        assertEquals(Set.of("ShowError", "CloseScreen"), koTEAGutterOwners("cov/News.kt"));
     }
 
-    public void testConcreteNewsGetsNoCommandGutter_concreteCommandKeepsBoth() {
+    public void testGuttersOnEmissionAndProcessingSites() {
+        assertTrue("Event Emission site in CovViewModel.kt", fileHasKoTEAGutter("cov/CovViewModel.kt"));
+        assertTrue("Event Processing + Command Emission + News Emission sites in CovUpdate.kt",
+                fileHasKoTEAGutter("cov/CovUpdate.kt"));
+        assertTrue("Command Processing site in CovHandler.kt", fileHasKoTEAGutter("cov/CovHandler.kt"));
+        assertTrue("News Processing site in CovFragment.kt", fileHasKoTEAGutter("cov/CovFragment.kt"));
+    }
+
+    public void testNearestRootClassifiesBothConcreteCommandAndConcreteNews() {
+        // Classification itself (NrShown is a News, not a Command, despite descending from
+        // NrCommand) is proven at the index layer by KoTEARootsIndexPsiTest; this only checks
+        // that both still surface gutter icons end to end.
         openFixtureProject("nearestRoot");
         Map<String, Set<Icon>> gutters = koTEAGuttersByClass("nr/Contract.kt");
 
-        assertEquals(Set.of("NrLoad"), gutters.keySet());
+        assertEquals(Set.of("NrLoad", "NrShown"), gutters.keySet());
         assertEquals(Set.of(PluginIcons.EMISSION, PluginIcons.PROCESSING), gutters.get("NrLoad"));
+        assertEquals(Set.of(PluginIcons.EMISSION, PluginIcons.PROCESSING), gutters.get("NrShown"));
     }
 
     public void testKoTEAGuttersAreHiddenInDiffViewersButNotInNormalEditors() {

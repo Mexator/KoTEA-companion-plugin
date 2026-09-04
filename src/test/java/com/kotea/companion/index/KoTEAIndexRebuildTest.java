@@ -27,7 +27,7 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
     public void testRetargetEventTypeArgument_updatesSnapshotAndRepaintsGutters() {
         openFixtureProject("indexRebuild");
         assertEquals(BASELINE, getKoTEAIndex());
-        assertEquals(Set.of("Feat1Clicked", "Feat1Load"), koTEAGutterOwners("feat1/Contract.kt"));
+        assertEquals(Set.of("Feat1Clicked", "Feat1Load", "Feat1News"), koTEAGutterOwners("feat1/Contract.kt"));
 
         patchFixture("feat1/Feat1Update.kt", "Feat1Event", "Feat1EventAlt");
         awaitIndexIdle();
@@ -41,7 +41,7 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
                 getKoTEAIndex()
         );
         assertEquals("gutters did not follow the new Event Root",
-                Set.of("Feat1AltClicked", "Feat1Load"), koTEAGutterOwners("feat1/Contract.kt"));
+                Set.of("Feat1AltClicked", "Feat1Load", "Feat1News"), koTEAGutterOwners("feat1/Contract.kt"));
     }
 
     public void testAddFeatureUpdateFile_addsItsRootsAndPaintsItsGutters() {
@@ -73,8 +73,8 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
                         Set.of("feat1.Feat1Command", "feat2.Feat2Command", "feat3.Feat3Command"),
                         Set.of("feat1.Feat1News", "feat2.Feat2News", "feat3.Feat3News")),
                 getKoTEAIndex());
-        assertEquals("the new feature's Concrete Event / Command did not get gutters",
-                Set.of("Feat3Tapped", "Feat3Send"), koTEAGutterOwners("feat3/Feat3.kt"));
+        assertEquals("the new feature's Concrete Event / Command / News did not get gutters",
+                Set.of("Feat3Tapped", "Feat3Send", "Feat3News"), koTEAGutterOwners("feat3/Feat3.kt"));
     }
 
     public void testDeleteFeatureUpdateFile_removesItsRootsFromTheSnapshot() {

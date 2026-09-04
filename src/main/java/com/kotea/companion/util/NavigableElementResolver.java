@@ -3,6 +3,7 @@ package com.kotea.companion.util;
 import com.intellij.psi.PsiElement;
 import com.kotea.companion.commands.CommandUtil;
 import com.kotea.companion.events.EventUtil;
+import com.kotea.companion.news.NewsUtil;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 import org.jetbrains.uast.UClass;
@@ -25,6 +26,10 @@ public final class NavigableElementResolver {
         KtClassOrObject eventClass = EventUtil.tryResolveToClass(element);
         if (eventClass != null) {
             return new NavigableElement(KoTEAElementKind.EVENT, eventClass);
+        }
+        KtClassOrObject newsClass = NewsUtil.tryResolveToClass(element);
+        if (newsClass != null) {
+            return new NavigableElement(KoTEAElementKind.NEWS, newsClass);
         }
         return resolveCommand(element);
     }

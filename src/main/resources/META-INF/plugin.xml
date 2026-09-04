@@ -14,10 +14,10 @@
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
         <b>KoTEA Companion</b> is an Android Studio plugin designed to improve Developer Experience in projects using the KoTEA architectural pattern.<br><br>
-        The plugin simplifies navigation by creating a contextual bridge between the points of generation (Emission) and execution (Processing) of Events and Commands.
+        The plugin simplifies navigation by creating a contextual bridge between the points of generation (Emission) and execution (Processing) of Events, Commands, and News.
         <ul>
-            <li><b>Go to emission:</b> Instantly jump to where an event or command is dispatched.</li>
-            <li><b>Go to processing:</b> Navigate to the Update class or CommandsFlowHandler where the logic is handled.</li>
+            <li><b>Go to emission:</b> Instantly jump to where an event, command, or news item is dispatched.</li>
+            <li><b>Go to processing:</b> Navigate to the Update class, CommandsFlowHandler, or news collector where the logic is handled.</li>
             <li><b>Interactive Gutter Icons:</b> Quick navigation markers in the editor gutter for declarations, call sites, and handlers.</li>
         </ul>
     ]]></description>
@@ -44,6 +44,9 @@
         <codeInsight.lineMarkerProvider
                 language="kotlin"
                 implementationClass="com.kotea.companion.events.EventMarkerProvider"/>
+        <codeInsight.lineMarkerProvider
+                language="kotlin"
+                implementationClass="com.kotea.companion.news.NewsMarkerProvider"/>
         <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
     </extensions>
 

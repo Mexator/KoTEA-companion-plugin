@@ -26,6 +26,8 @@ import com.kotea.companion.commands.CommandProcessingSearcher;
 import com.kotea.companion.events.EventEmissionSearcher;
 import com.kotea.companion.events.EventProcessingSearcher;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
+import com.kotea.companion.news.NewsEmissionSearcher;
+import com.kotea.companion.news.NewsProcessingSearcher;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
@@ -80,6 +82,24 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/Commands.kt", "LoadItems", expected);
         assertGutterLandsOn("cov/Commands.kt", "LoadItems", PluginIcons.PROCESSING, expected);
+    }
+
+    public void testNewsEmission() {
+        Site expected = singleSearcherTarget("cov/News.kt", "ShowError",
+                NewsEmissionSearcher::findEmissions);
+        assertEquals("CovUpdate.kt", expected.file());
+
+        assertActionLandsOn(new GoToEmissionAction(), "cov/News.kt", "ShowError", expected);
+        assertGutterLandsOn("cov/News.kt", "ShowError", PluginIcons.EMISSION, expected);
+    }
+
+    public void testNewsProcessing() {
+        Site expected = singleSearcherTarget("cov/News.kt", "ShowError",
+                NewsProcessingSearcher::findProcessing);
+        assertEquals("CovFragment.kt", expected.file());
+
+        assertActionLandsOn(new GoToProcessingAction(), "cov/News.kt", "ShowError", expected);
+        assertGutterLandsOn("cov/News.kt", "ShowError", PluginIcons.PROCESSING, expected);
     }
 
     public void testActionHiddenOnNonKoteaElement() {

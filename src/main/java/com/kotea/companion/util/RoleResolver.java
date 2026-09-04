@@ -20,13 +20,13 @@ public final class RoleResolver {
     }
 
     static Role roleOfFileName(@NotNull String fileName, @NotNull KoTEAElementKind kind) {
-        return fileName.contains(processingFileToken(kind)) ? Role.PROCESSING : Role.EMISSION;
-    }
-
-    private static String processingFileToken(KoTEAElementKind kind) {
         return switch (kind) {
-            case EVENT -> "Update";
-            case COMMAND -> "Handler";
+            // Events are processed inside the Update class, emitted everywhere else.
+            case EVENT -> fileName.contains("Update") ? Role.PROCESSING : Role.EMISSION;
+            // Commands are processed inside a CommandsFlowHandler, emitted everywhere else
+            case COMMAND -> fileName.contains("Handler") ? Role.PROCESSING : Role.EMISSION;
+            // News is constructed inside the Update class and processed everywhere else
+            case NEWS -> fileName.contains("Update") ? Role.EMISSION : Role.PROCESSING;
         };
     }
 }
