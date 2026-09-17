@@ -25,6 +25,8 @@ final class IndexDebugLog {
     }
 
     static synchronized void log(String message) {
+        LOG.info(message);
+
         String line = LocalDateTime.now().format(TIME_FORMAT) + " [" + Thread.currentThread().getName() + "] "
                 + message + System.lineSeparator();
         try {

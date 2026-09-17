@@ -65,6 +65,8 @@ public final class KoTEAIndexComputer {
             hits.addAll(ClassInheritorsSearch.search(libraryBase, productionScope, true).findAll());
         }
         PerfLog.logElapsed(LOG, "KoTEA full ClassInheritorsSearch found " + hits.size() + " candidates", searchStart);
+        IndexDebugLog.log("FULL_SCAN_SEARCH candidates=" + hits.size()
+                + " elapsedMs=" + (System.nanoTime() - searchStart) / 1_000_000);
 
         Map<VirtualFile, List<UpdateRecord>> recordsByFile = new HashMap<>();
         for (PsiClass psiClass : hits) {

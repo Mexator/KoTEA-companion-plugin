@@ -294,6 +294,9 @@ public final class KoTEAIndexService implements Disposable {
         int recordCount = recordsByFile.values().stream().mapToInt(List::size).sum();
         PerfLog.logElapsed(LOG, "KoTEA index recompute (" + pathLabel + "), " + recordsByFile.size() + " files / "
                 + recordCount + " records, snapshot " + (changed ? "changed" : "unchanged"), recomputeStart);
+        IndexDebugLog.log("PUBLISH pathLabel=" + pathLabel + " files=" + recordsByFile.size()
+                + " records=" + recordCount + " changed=" + changed
+                + " elapsedMs=" + (System.nanoTime() - recomputeStart) / 1_000_000);
 
         if (changed) {
             ApplicationManager.getApplication().invokeLater(

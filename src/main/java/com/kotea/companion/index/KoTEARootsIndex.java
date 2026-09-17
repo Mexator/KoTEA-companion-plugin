@@ -100,8 +100,10 @@ public final class KoTEARootsIndex {
     private Role resolveRole(PsiClass candidate, Map<PsiClass, Set<Role>> rootsAtThisDistance) {
         for (Map.Entry<PsiClass, Set<Role>> entry : rootsAtThisDistance.entrySet()) {
             if (entry.getValue().size() > 1) {
-                LOG.debug("KoTEA: " + candidate.getQualifiedName() + " reaches multi-role Root "
-                        + entry.getKey().getQualifiedName() + " " + entry.getValue() + "; treating as non-navigable");
+                String message = "KoTEA: " + candidate.getQualifiedName() + " reaches multi-role Root "
+                        + entry.getKey().getQualifiedName() + " " + entry.getValue() + "; treating as non-navigable";
+                LOG.debug(message);
+                IndexDebugLog.log("MULTI_ROLE_CONFLICT " + message);
                 return null;
             }
         }
