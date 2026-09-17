@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.3.0"
+version = "1.3.1-debug1"
 
 repositories {
     mavenCentral()

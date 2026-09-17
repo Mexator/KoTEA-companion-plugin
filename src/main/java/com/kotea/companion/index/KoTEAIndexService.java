@@ -88,6 +88,8 @@ public final class KoTEAIndexService implements Disposable {
         project.getMessageBus().connect(this).subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
             @Override
             public void after(@NotNull List<? extends VFileEvent> events) {
+                int dirtyBefore = dirtyFiles.size();
+                int deletedBefore = deletedFiles.size();
                 for (VFileEvent event : events) {
                     VirtualFile file = event.getFile();
                     if (file == null) continue;
@@ -98,13 +100,20 @@ public final class KoTEAIndexService implements Disposable {
                         dirtyFiles.add(file);
                     }
                 }
-                if (!dirtyFiles.isEmpty() || !deletedFiles.isEmpty()) onChangeDetected();
+                int dirtyAdded = dirtyFiles.size() - dirtyBefore;
+                int deletedAdded = deletedFiles.size() - deletedBefore;
+                if (dirtyAdded > 0 || deletedAdded > 0) {
+                    IndexDebugLog.log("VFS_BATCH totalEvents=" + events.size() + " dirtyAdded=" + dirtyAdded
+                            + " deletedAdded=" + deletedAdded);
+                    onChangeDetected();
+                }
             }
         });
 
         project.getMessageBus().connect(this).subscribe(ModuleRootListener.TOPIC, new ModuleRootListener() {
             @Override
             public void rootsChanged(@NotNull ModuleRootEvent event) {
+                IndexDebugLog.log("ROOTS_CHANGED");
                 fullRebuildRequested = true;
                 onChangeDetected();
             }
@@ -157,7 +166,10 @@ public final class KoTEAIndexService implements Disposable {
     }
 
     private void scheduleRecompute() {
-        if (!recomputePending.compareAndSet(false, true)) return;
+        if (!recomputePending.compareAndSet(false, true)) {
+            IndexDebugLog.log("RECOMPUTE_COALESCED (already pending)");
+            return;
+        }
         try {
             recomputeExecutor.execute(this::recompute);
         } catch (RejectedExecutionException e) {
@@ -168,8 +180,14 @@ public final class KoTEAIndexService implements Disposable {
 
     private void recompute() {
         long stamp = changeCounter.get();
+        long recomputeWallStart = System.nanoTime();
+        boolean willRunFull = fullRebuildRequested || !initialized;
+        IndexDebugLog.log("RECOMPUTE_START stamp=" + stamp + " mode=" + (willRunFull ? "full" : "incremental")
+                + " fullRebuildRequested=" + fullRebuildRequested + " initialized=" + initialized
+                + " dirty=" + dirtyFiles.size() + " deleted=" + deletedFiles.size()
+                + " dumb=" + DumbService.getInstance(project).isDumb());
         try {
-            if (fullRebuildRequested || !initialized) {
+            if (willRunFull) {
                 runFull(stamp);
                 return;
             }
@@ -184,6 +202,7 @@ public final class KoTEAIndexService implements Disposable {
                     .executeSynchronously();
 
             if (patched == null) {
+                IndexDebugLog.log("INCREMENTAL_FALLBACK_TO_FULL stamp=" + stamp);
                 runFull(stamp);
                 return;
             }
@@ -206,7 +225,11 @@ public final class KoTEAIndexService implements Disposable {
             );
         } finally {
             recomputePending.set(false);
-            if (changeCounter.get() != stamp || !initialized) scheduleRecompute();
+            boolean willReschedule = changeCounter.get() != stamp || !initialized;
+            IndexDebugLog.log("RECOMPUTE_END stamp=" + stamp
+                    + " elapsedMs=" + (System.nanoTime() - recomputeWallStart) / 1_000_000
+                    + " willReschedule=" + willReschedule);
+            if (willReschedule) scheduleRecompute();
         }
     }
 
@@ -218,6 +241,7 @@ public final class KoTEAIndexService implements Disposable {
         for (VirtualFile file : dirtySnapshot) {
             List<UpdateRecord> newRecords = KoTEAIndexComputer.computeForFile(project, file);
             if (!sameUpdateHierarchy(recordsByFile.getOrDefault(file, List.of()), newRecords)) {
+                IndexDebugLog.log("MEMBERSHIP_CHANGED file=" + file.getPath());
                 return null;
             }
             patched.put(file, newRecords);
@@ -225,6 +249,7 @@ public final class KoTEAIndexService implements Disposable {
         for (VirtualFile file : deletedSnapshot) {
             List<UpdateRecord> oldRecords = recordsByFile.get(file);
             if (oldRecords != null && !oldRecords.isEmpty()) {
+                IndexDebugLog.log("NON_EMPTY_FILE_DELETED file=" + file.getPath());
                 return null;
             }
         }
@@ -233,6 +258,7 @@ public final class KoTEAIndexService implements Disposable {
 
     private void runFull(long stamp) {
         long recomputeStart = PerfLog.start();
+        IndexDebugLog.log("FULL_SCAN_START stamp=" + stamp + " dumb=" + DumbService.getInstance(project).isDumb());
 
         BackgroundableProcessIndicator indicator =
                 new BackgroundableProcessIndicator(project, "Indexing KoTEA events/commands", null, null, true);
@@ -247,6 +273,10 @@ public final class KoTEAIndexService implements Disposable {
                         .executeSynchronously()),
                 indicator
         );
+
+        IndexDebugLog.log("FULL_SCAN_DONE stamp=" + stamp
+                + " elapsedMs=" + (System.nanoTime() - recomputeStart) / 1_000_000
+                + " dumb=" + DumbService.getInstance(project).isDumb());
 
         recordsByFile.clear();
         recordsByFile.putAll(result.get());
