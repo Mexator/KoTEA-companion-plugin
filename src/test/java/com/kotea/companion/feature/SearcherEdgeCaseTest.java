@@ -12,8 +12,6 @@ import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.uast.UClass;
-import org.jetbrains.uast.UastContextKt;
 
 import java.util.List;
 import java.util.Set;
@@ -76,8 +74,7 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
     private List<PsiElement> commandEmission(String declName) {
         KtClassOrObject decl = ktClass("edges/Commands.kt", declName);
         GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
-        return ReadAction.compute(() ->
-                CommandEmissionSearcher.findEmission(UastContextKt.toUElement(decl, UClass.class), scope));
+        return ReadAction.compute(() -> CommandEmissionSearcher.findEmission(decl, scope));
     }
 
     /**

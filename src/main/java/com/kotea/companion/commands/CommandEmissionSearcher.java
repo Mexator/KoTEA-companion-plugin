@@ -1,21 +1,22 @@
 package com.kotea.companion.commands;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.kotea.companion.util.CachingSearcher;
 import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.RoleResolver;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.uast.*;
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc;
+import org.jetbrains.kotlin.psi.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class CommandEmissionSearcher extends CachingSearcher<UClass> {
+public class CommandEmissionSearcher extends CachingSearcher<KtClassOrObject> {
 
     private static final Logger LOG = Logger.getInstance(CommandEmissionSearcher.class);
     private static final CommandEmissionSearcher INSTANCE = new CommandEmissionSearcher();
@@ -23,49 +24,32 @@ public class CommandEmissionSearcher extends CachingSearcher<UClass> {
     private CommandEmissionSearcher() {
     }
 
-    public static List<PsiElement> findEmission(@NotNull UClass uClass, GlobalSearchScope scope) {
-        return INSTANCE.findCached(uClass, scope);
+    public static List<PsiElement> findEmission(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
+        return INSTANCE.findCached(target, scope);
     }
 
     @Override
-    protected PsiElement cacheKeyOf(@NotNull UClass target) {
-        return target.getJavaPsi();
+    protected PsiElement cacheKeyOf(@NotNull KtClassOrObject target) {
+        return target;
     }
 
     @Override
-    protected List<PsiElement> search(@NotNull UClass uClass, @NotNull GlobalSearchScope scope) {
+    protected List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
         long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
-        PsiClass psiClass = uClass.getJavaPsi();
+        for (var ref : ReferencesSearch.search(target, scope, false).findAll()) {
+            PsiElement el = ref.getElement();
+            if (RoleResolver.roleOf(el, KoTEAElementKind.COMMAND) != RoleResolver.Role.EMISSION) continue;
+            if (PsiTreeUtil.getParentOfType(el, KtImportDirective.class, KtTypeReference.class,
+                    KtAnnotationEntry.class, KDoc.class) != null) continue;
 
-        ReferencesSearch.search(psiClass, scope).forEach(usage -> {
-            PsiElement element = usage.getElement();
-            UElement uElement = UastContextKt.toUElement(element, UElement.class);
-            if (uElement == null) return true;
-            if (RoleResolver.roleOf(element, KoTEAElementKind.COMMAND) != RoleResolver.Role.EMISSION) return true;
-
-            if (UastUtils.getParentOfType(uElement, UImportStatement.class) != null) return true;
-            if (UastUtils.getParentOfType(uElement, UTypeReferenceExpression.class) != null ||
-                    UastUtils.getParentOfType(uElement, UAnnotation.class) != null) return true;
-
-            UCallExpression call = UastUtils.getParentOfType(uElement, UCallExpression.class, false);
-            if (call != null) {
-                targets.add(element);
-                return true;
+            PsiElement parent = el.getParent();
+            if (PsiTreeUtil.getParentOfType(el, KtCallExpression.class) != null
+                    || parent instanceof KtProperty || parent instanceof KtParameter) {
+                targets.add(el);
             }
-
-            if (uElement instanceof USimpleNameReferenceExpression || uElement instanceof UQualifiedReferenceExpression) {
-                UElement parent = uElement.getUastParent();
-                if (parent instanceof UVariable variable) {
-                    if (!uElement.equals(variable.getTypeReference())) {
-                        targets.add(element);
-                    }
-                }
-            }
-            return true;
-        });
-
-        PerfLog.logSearch(LOG, "CommandEmissionSearcher", uClass.getName(), targets.size(), start);
+        }
+        PerfLog.logSearch(LOG, "CommandEmissionSearcher", target.getName(), targets.size(), start);
         return targets;
     }
 }

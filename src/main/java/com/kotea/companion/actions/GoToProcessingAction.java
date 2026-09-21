@@ -7,8 +7,6 @@ import com.kotea.companion.events.EventProcessingSearcher;
 import com.kotea.companion.news.NewsProcessingSearcher;
 import com.kotea.companion.util.NavigableElement;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.uast.UClass;
-import org.jetbrains.uast.UastContextKt;
 
 import java.util.List;
 
@@ -20,10 +18,7 @@ public class GoToProcessingAction extends BaseGoToAction {
         return switch (target.kind()) {
             case EVENT -> EventProcessingSearcher.findProcessing(anchor, scope);
             case NEWS -> NewsProcessingSearcher.findProcessing(anchor, scope);
-            case COMMAND -> {
-                UClass uClass = UastContextKt.toUElement(anchor, UClass.class);
-                yield uClass != null ? CommandProcessingSearcher.findProcessing(uClass, scope) : List.of();
-            }
+            case COMMAND -> CommandProcessingSearcher.findProcessing(anchor, scope);
         };
     }
 

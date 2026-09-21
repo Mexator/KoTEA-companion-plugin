@@ -31,8 +31,6 @@ import com.kotea.companion.news.NewsProcessingSearcher;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.uast.UClass;
-import org.jetbrains.uast.UastContextKt;
 
 import javax.swing.Icon;
 import javax.swing.JPanel;
@@ -68,7 +66,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testCommandEmission() {
         Site expected = singleSearcherTarget("cov/Commands.kt", "LoadItems",
-                (kt, scope) -> CommandEmissionSearcher.findEmission(toUClass(kt), scope));
+                CommandEmissionSearcher::findEmission);
         assertEquals("CovUpdate.kt", expected.file());
 
         assertActionLandsOn(new GoToEmissionAction(), "cov/Commands.kt", "LoadItems", expected);
@@ -77,7 +75,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testCommandProcessing() {
         Site expected = singleSearcherTarget("cov/Commands.kt", "LoadItems",
-                (kt, scope) -> CommandProcessingSearcher.findProcessing(toUClass(kt), scope));
+                CommandProcessingSearcher::findProcessing);
         assertEquals("CovHandler.kt", expected.file());
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/Commands.kt", "LoadItems", expected);
@@ -228,10 +226,6 @@ public class NavigationTest extends KoTEAFixtureTestCase {
     private static Site siteOf(PsiElement element) {
         return new Site(element.getContainingFile().getName(),
                 element.getTextRange().getStartOffset(), element.getTextRange().getEndOffset(), element.getText());
-    }
-
-    private UClass toUClass(KtClassOrObject ktClass) {
-        return UastContextKt.toUElement(ktClass, UClass.class);
     }
 
     private static String iconName(Icon icon) {

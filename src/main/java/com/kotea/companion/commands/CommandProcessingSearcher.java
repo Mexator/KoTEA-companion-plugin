@@ -1,19 +1,22 @@
 package com.kotea.companion.commands;
 
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.kotea.companion.util.CachingSearcher;
 import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.RoleResolver;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.uast.*;
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc;
+import org.jetbrains.kotlin.psi.KtClassOrObject;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
-public class CommandProcessingSearcher extends CachingSearcher<UClass> {
+public class CommandProcessingSearcher extends CachingSearcher<KtClassOrObject> {
 
     private static final Logger LOG = Logger.getInstance(CommandProcessingSearcher.class);
     private static final CommandProcessingSearcher INSTANCE = new CommandProcessingSearcher();
@@ -21,39 +24,31 @@ public class CommandProcessingSearcher extends CachingSearcher<UClass> {
     private CommandProcessingSearcher() {
     }
 
-    public static List<PsiElement> findProcessing(@NotNull UClass uClass, GlobalSearchScope scope) {
-        return INSTANCE.findCached(uClass, scope);
+    public static List<PsiElement> findProcessing(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
+        return INSTANCE.findCached(target, scope);
     }
 
     @Override
-    protected PsiElement cacheKeyOf(@NotNull UClass target) {
-        return target.getJavaPsi();
+    protected PsiElement cacheKeyOf(@NotNull KtClassOrObject target) {
+        return target;
     }
 
     @Override
-    protected List<PsiElement> search(@NotNull UClass uClass, @NotNull GlobalSearchScope scope) {
+    protected List<PsiElement> search(@NotNull KtClassOrObject target, @NotNull GlobalSearchScope scope) {
         long start = PerfLog.start();
         List<PsiElement> targets = new ArrayList<>();
-        PsiClass classCommand = uClass.getJavaPsi();
+        for (var ref : ReferencesSearch.search(target, scope, false).findAll()) {
+            PsiElement el = ref.getElement();
+            if (RoleResolver.roleOf(el, KoTEAElementKind.COMMAND) != RoleResolver.Role.PROCESSING) continue;
+            if (PsiTreeUtil.getParentOfType(el, KDoc.class) != null) continue;
 
-        ReferencesSearch.search(classCommand, scope).forEach(usage -> {
-            PsiElement element = usage.getElement();
-            UElement uElement = UastContextKt.toUElement(element, UElement.class);
-            if (uElement == null) return true;
-            if (RoleResolver.roleOf(element, KoTEAElementKind.COMMAND) != RoleResolver.Role.PROCESSING) return true;
-
-            UClass handlerClass = UastUtils.getParentOfType(uElement, UClass.class);
-            if (handlerClass != null && CommandUtil.isCommandsHandler(handlerClass, classCommand)) {
-                PsiClass psiHandler = handlerClass.getJavaPsi();
-                PsiMethod[] methods = psiHandler.findMethodsByName("handle", false);
-                if (methods.length != 0) {
-                    targets.add(element);
-                }
+            KtClassOrObject handler = PsiTreeUtil.getParentOfType(el, KtClassOrObject.class);
+            if (handler != null && CommandUtil.isCommandsHandler(handler, target)
+                    && CommandUtil.hasHandleFunction(handler)) {
+                targets.add(el);
             }
-            return true;
-        });
-
-        PerfLog.logSearch(LOG, "CommandProcessingSearcher", uClass.getName(), targets.size(), start);
+        }
+        PerfLog.logSearch(LOG, "CommandProcessingSearcher", target.getName(), targets.size(), start);
         return targets;
     }
 }

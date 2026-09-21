@@ -7,8 +7,6 @@ import com.kotea.companion.events.EventEmissionSearcher;
 import com.kotea.companion.news.NewsEmissionSearcher;
 import com.kotea.companion.util.NavigableElement;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.uast.UClass;
-import org.jetbrains.uast.UastContextKt;
 
 import java.util.List;
 
@@ -20,10 +18,7 @@ public class GoToEmissionAction extends BaseGoToAction {
         return switch (target.kind()) {
             case EVENT -> EventEmissionSearcher.findEmissions(anchor, scope);
             case NEWS -> NewsEmissionSearcher.findEmissions(anchor, scope);
-            case COMMAND -> {
-                UClass uClass = UastContextKt.toUElement(anchor, UClass.class);
-                yield uClass != null ? CommandEmissionSearcher.findEmission(uClass, scope) : List.of();
-            }
+            case COMMAND -> CommandEmissionSearcher.findEmission(anchor, scope);
         };
     }
 

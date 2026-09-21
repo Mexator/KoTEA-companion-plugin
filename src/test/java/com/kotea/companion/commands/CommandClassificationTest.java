@@ -1,14 +1,11 @@
 package com.kotea.companion.commands;
 
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.psi.JavaPsiFacade;
-import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 
 /**
- * Tests for {@link CommandUtil#isNavigableCommand}
+ * Tests for {@link CommandUtil#isNavigableCommandClass}
  */
 public class CommandClassificationTest extends KoTEAFixtureTestCase {
 
@@ -18,31 +15,21 @@ public class CommandClassificationTest extends KoTEAFixtureTestCase {
         openFixtureProject("featureCoverage");
     }
 
-    public void testSealedOrAbstractCommandBaseIsNotNavigable() {
+    public void testOnlyConcreteCommandsAreNavigable() {
         PsiFile file = myFixture.configureFromTempProjectFile("cov/Commands.kt");
+
         ReadAction.run(() -> {
-            assertNavigable(file, "sealed interface Command Root", "FeatureCommand", false);
-            assertNavigable(file, "sealed / abstract Command base", "BaseCommand", false);
-            assertNavigable(file, "plain interface below the Root", "AsyncCommand", false);
+            assertFalse("sealed interface Command Root is not Navigable",
+                    CommandUtil.isNavigableCommandClass(findKtClass(file, "FeatureCommand")));
+            assertFalse("sealed / abstract Command base is not Navigable",
+                    CommandUtil.isNavigableCommandClass(findKtClass(file, "BaseCommand")));
+            assertFalse("plain interface below the Root is not Navigable",
+                    CommandUtil.isNavigableCommandClass(findKtClass(file, "AsyncCommand")));
+
+            assertTrue("Concrete Command (data class) is Navigable",
+                    CommandUtil.isNavigableCommandClass(findKtClass(file, "LoadItems")));
+            assertTrue("Concrete Command (data object) is Navigable",
+                    CommandUtil.isNavigableCommandClass(findKtClass(file, "Refresh")));
         });
-    }
-
-    public void testConcreteCommandsAreNavigable() {
-        PsiFile file = myFixture.configureFromTempProjectFile("cov/Commands.kt");
-        ReadAction.run(() -> {
-            assertNavigable(file, "Concrete Command (data class)", "LoadItems", true);
-            assertNavigable(file, "Concrete Command (data object)", "Refresh", true);
-        });
-    }
-
-    /** Asserts both entry points ({@code PsiClass} path and UAST path) agree with {@code expected}. */
-    private void assertNavigable(PsiFile file, String message, String simpleName, boolean expected) {
-        PsiClass psiClass = JavaPsiFacade.getInstance(getProject())
-                .findClass("cov." + simpleName, GlobalSearchScope.allScope(getProject()));
-        assertNotNull("fixture class cov." + simpleName + " not found", psiClass);
-        assertEquals(message + " — via PsiClass", expected, CommandUtil.isNavigableCommand(psiClass));
-
-        assertEquals(message + " — via UAST entry point", expected,
-                CommandUtil.isNavigableCommand(findKtClass(file, simpleName)));
     }
 }

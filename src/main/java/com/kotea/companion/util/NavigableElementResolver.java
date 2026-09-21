@@ -6,11 +6,6 @@ import com.kotea.companion.events.EventUtil;
 import com.kotea.companion.news.NewsUtil;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
-import org.jetbrains.uast.UClass;
-import org.jetbrains.uast.UElement;
-import org.jetbrains.uast.UMethod;
-import org.jetbrains.uast.UastContextKt;
-import org.jetbrains.uast.UastUtils;
 
 /**
  * Resolves a PSI element to the {@link NavigableElement} (if any).
@@ -31,25 +26,10 @@ public final class NavigableElementResolver {
         if (newsClass != null) {
             return new NavigableElement(KoTEAElementKind.NEWS, newsClass);
         }
-        return resolveCommand(element);
-    }
-
-    @Nullable
-    private static NavigableElement resolveCommand(PsiElement element) {
-        UElement uElement = UastContextKt.toUElement(element, UElement.class);
-        if (uElement == null) return null;
-
-        UClass uClass = null;
-        if (uElement instanceof UMethod method && method.isConstructor()) {
-            uClass = UastUtils.getParentOfType(uElement, UClass.class);
+        KtClassOrObject commandClass = CommandUtil.tryResolveToClass(element);
+        if (commandClass != null) {
+            return new NavigableElement(KoTEAElementKind.COMMAND, commandClass);
         }
-        if (uClass == null) {
-            uClass = UastUtils.getParentOfType(uElement, UClass.class, false);
-        }
-        if (uClass == null || !CommandUtil.isNavigableCommand(uClass.getJavaPsi())) return null;
-
-        return uClass.getSourcePsi() instanceof KtClassOrObject ktClass
-                ? new NavigableElement(KoTEAElementKind.COMMAND, ktClass)
-                : null;
+        return null;
     }
 }

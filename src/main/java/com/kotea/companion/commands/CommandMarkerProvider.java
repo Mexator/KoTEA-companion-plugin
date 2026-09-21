@@ -18,8 +18,10 @@ import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.pom.Navigatable;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiReference;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
@@ -28,7 +30,8 @@ import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.uast.*;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.psi.*;
 
 import javax.swing.*;
 import java.awt.event.MouseEvent;
@@ -72,88 +75,76 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
     }
 
     private void addClassMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        UClass uCommand = UastContextKt.toUElement(element, UClass.class);
+        if (!(element instanceof KtClassOrObject command) || !CommandUtil.isNavigableCommandClass(command)) return;
 
-        if (uCommand == null || uCommand.getName() == null) return;
+        PsiElement identifier = command.getNameIdentifier();
+        if (identifier == null) return;
 
-        PsiClass psiClass = uCommand.getJavaPsi();
-
-        if (CommandUtil.isNavigableCommand(psiClass)) {
-
-            PsiElement identifier = psiClass.getNameIdentifier();
-            if (identifier == null) return;
-
-           RelatedItemLineMarkerInfo<PsiElement> emissionMarker = getMarker(identifier, psiClass, PluginIcons.EMISSION, " Go to Emission", CommandEmissionSearcher::findEmission);
-           result.add(emissionMarker);
-
-           RelatedItemLineMarkerInfo<PsiElement> processingMarker = getMarker(identifier, psiClass, PluginIcons.PROCESSING, "Go to Processing", CommandProcessingSearcher::findProcessing);
-           result.add(processingMarker);
-        }
+        result.add(getMarker(identifier, command, PluginIcons.EMISSION, " Go to Emission", CommandEmissionSearcher::findEmission));
+        result.add(getMarker(identifier, command, PluginIcons.PROCESSING, "Go to Processing", CommandProcessingSearcher::findProcessing));
     }
 
     private void addConstructorCallMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        UElement uElement = UastContextKt.toUElement(element, UElement.class);
-        if (!(uElement instanceof UCallExpression callExpression)) return;
-        PsiMethod constructor = callExpression.resolve();
-        if (constructor != null && constructor.isConstructor()) {
-            PsiClass constructedClass = constructor.getContainingClass();
-            if (constructedClass != null && CommandUtil.isNavigableCommand(constructedClass)) {
-                UClass uCommand = UastContextKt.toUElement(constructedClass, UClass.class);
-                if (uCommand != null) {
-                    RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
-                    result.add(marker);
-                }
-            }
+        if (!(element instanceof KtCallExpression call)) return;
+        if (!(call.getCalleeExpression() instanceof KtReferenceExpression callee)) return;
+
+        PsiElement resolved = resolve(callee);
+        KtClassOrObject constructedClass = resolved instanceof KtConstructor<?> constructor
+                ? constructor.getContainingClassOrObject()
+                : resolved instanceof KtClass ktClass ? ktClass : null;
+        if (constructedClass != null && CommandUtil.isNavigableCommandClass(constructedClass)) {
+            result.add(getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing));
         }
     }
 
     private void addObjectMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        UElement uElement = UastContextKt.toUElement(element, UElement.class);
-        if (uElement instanceof USimpleNameReferenceExpression ref) {
-            UElement parent = uElement.getUastParent();
-            if (parent == null) return;
+        if (!(element instanceof KtNameReferenceExpression ref) || !isCallArgument(ref)) return;
 
-            UCallExpression call = UastUtils.getParentOfType(uElement, UCallExpression.class);
-            if (call != null) {
-                if (call.getValueArguments().contains(uElement) || call.getValueArguments().contains(parent)) {
-                    PsiElement res = ref.resolve();
-                    if (res instanceof PsiClass psiClass && CommandUtil.isNavigableCommand(psiClass)) {
-                        RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, psiClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing);
-                        result.add(marker);
-                    }
-                }
-            }
+        if (resolve(ref) instanceof KtClassOrObject command && CommandUtil.isNavigableCommandClass(command)) {
+            result.add(getMarker(element, command, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing));
         }
     }
 
     private void addInHandle(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        UElement uElement = UastContextKt.toUElement(element, UElement.class);
+        if (!(element instanceof KtNameReferenceExpression ref)) return;
 
-        if (!(uElement instanceof USimpleNameReferenceExpression ref)) return;
+        KtClassOrObject handler = PsiTreeUtil.getParentOfType(ref, KtClassOrObject.class);
+        if (handler == null) return;
 
-        PsiElement resolved = ref.resolve();
-        if (!(resolved instanceof PsiClass targetCommand) || targetCommand.isInterface()) return;
+        if (!(resolve(ref) instanceof KtClassOrObject targetCommand)) return;
+        if (targetCommand instanceof KtClass ktClass && ktClass.isInterface()) return;
 
-        UClass uCommand = UastUtils.getParentOfType(ref, UClass.class);
-        if (uCommand == null) return;
+        if (!CommandUtil.isCommandsHandler(handler, targetCommand)) return;
 
-        if (!CommandUtil.isCommandsHandler(uCommand, targetCommand)) return;
-
-        RelatedItemLineMarkerInfo<PsiElement> marker = getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission);
-
-        result.add(marker);
+        result.add(getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission));
     }
 
-    private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, PsiClass targetCommand, Icon icon, String title,
-                                                            BiFunction<UClass, GlobalSearchScope, List<PsiElement>> searchFunc) {
+    /** {@code ref} is a call argument by itself, or as either side of a qualified expression. */
+    private static boolean isCallArgument(KtNameReferenceExpression ref) {
+        PsiElement parent = ref.getParent();
+        if (parent instanceof KtQualifiedExpression) parent = parent.getParent();
+        return parent instanceof KtValueArgument
+                && parent.getParent() instanceof KtValueArgumentList list
+                && list.getParent() instanceof KtCallExpression;
+    }
+
+    @Nullable
+    private static PsiElement resolve(KtReferenceExpression ref) {
+        PsiReference reference = ref.getReference();
+        PsiElement resolved = reference != null ? reference.resolve() : null;
+        return resolved != null ? resolved.getNavigationElement() : null;
+    }
+
+    private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, KtClassOrObject targetCommand, Icon icon, String title,
+                                                            BiFunction<KtClassOrObject, GlobalSearchScope, List<PsiElement>> searchFunc) {
         PsiElement anchor = leafOf(element);
 
         GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) -> {
             Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
             if (editor == null) return;
 
-            String className = targetCommand.getQualifiedName() != null
-                    ? targetCommand.getQualifiedName() : targetCommand.getName();
+            String className = targetCommand.getFqName() != null
+                    ? targetCommand.getFqName().asString() : targetCommand.getName();
             String lockKey = className + ":" + title;
 
             if (!SearchLock.tryLock(lockKey)) {
@@ -167,10 +158,9 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                     indicator.setIndeterminate(true);
                     try {
                         indicator.setText("Searching in module...");
-                        UClass uClass = UastContextKt.toUElement(targetCommand, UClass.class);
                         long moduleSearchStart = PerfLog.start();
                         List<PsiElement> targets = ReadAction.compute(() ->
-                                searchFunc.apply(uClass, ScopeBuilder.getModuleScope(anchor)));
+                                searchFunc.apply(targetCommand, ScopeBuilder.getModuleScope(anchor)));
                         PerfLog.logElapsed(LOG, "CommandMarkerProvider module-scope " + title + " search",
                                 moduleSearchStart);
 
@@ -179,7 +169,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                             indicator.setText("Searching in project...");
                             long projectSearchStart = PerfLog.start();
                             targets = ReadAction.compute(() ->
-                                    searchFunc.apply(uClass, ScopeBuilder.getProductionScope(anchor)));
+                                    searchFunc.apply(targetCommand, ScopeBuilder.getProductionScope(anchor)));
                             PerfLog.logElapsed(LOG, "CommandMarkerProvider project-scope " + title + " search",
                                     projectSearchStart);
                             scope = "project";

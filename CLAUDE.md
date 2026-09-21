@@ -26,7 +26,7 @@ Build output: `build/distributions/*.zip`
 The plugin has three layers that work together for each navigable element type (Event and Command):
 
 ### 1. Line Marker Providers (Gutter Icons)
-`EventMarkerProvider.java` and `CommandMarkerProvider.java` register with IntelliJ's `lineMarkerProvider` extension point. They detect KoTEA elements in PSI/UAST and attach clickable gutter icons (emission/processing) that trigger the corresponding action.
+`EventMarkerProvider.java` and `CommandMarkerProvider.java` register with IntelliJ's `lineMarkerProvider` extension point. They detect KoTEA elements in Kotlin PSI and attach clickable gutter icons (emission/processing) that trigger the corresponding action.
 
 ### 2. Actions
 `GoToEmissionAction` and `GoToProcessingAction` (both extending `BaseGoToAction`) handle Events and Commands alike, responding to gutter icon clicks and keyboard shortcuts:
@@ -34,7 +34,7 @@ The plugin has three layers that work together for each navigable element type (
 - `Ctrl+Alt+K` → Processing
 
 ### 3. Searchers
-One searcher per navigation direction: `EventEmissionSearcher`, `EventProcessingSearcher`, `CommandEmissionSearcher`, `CommandProcessingSearcher`. These are the heaviest classes — they walk PSI/UAST trees to find usages and return `NavigatablePsiElement` targets.
+One searcher per navigation direction: `EventEmissionSearcher`, `EventProcessingSearcher`, `CommandEmissionSearcher`, `CommandProcessingSearcher`. These are the heaviest classes — they walk Kotlin PSI trees to find usages and return `NavigatablePsiElement` targets.
 
 ### Supporting Infrastructure
 - **`ScopeBuilder`** — restricts searches to production sources, avoiding false matches in test files.
