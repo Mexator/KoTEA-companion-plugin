@@ -2,10 +2,6 @@ package com.kotea.companion.fixtures;
 
 import com.intellij.codeInsight.daemon.GutterMark;
 import com.intellij.codeInsight.daemon.LineMarkerInfo;
-import com.intellij.openapi.application.WriteAction;
-import com.intellij.openapi.project.RootsChangeRescanningInfo;
-import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
-import com.intellij.openapi.util.EmptyRunnable;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -50,16 +46,9 @@ public abstract class KoTEAFixtureTestCase extends BasePlatformTestCase {
      */
     protected KoTEARootsIndex openFixtureProject(String fixtureDir) {
         myFixture.copyDirectoryToProject(fixtureDir, "");
-        KoTEAIndexService.getInstance(getProject()).registerListeners();
-        return forceFullIndexRebuild();
-    }
-
-    /**
-     * Runs a full rescan, waits for it to finish, and returns the resulting snapshot
-     */
-    protected KoTEARootsIndex forceFullIndexRebuild() {
-        WriteAction.runAndWait(() -> ProjectRootManagerEx.getInstanceEx(getProject())
-                .makeRootsChange(EmptyRunnable.getInstance(), RootsChangeRescanningInfo.TOTAL_RESCAN));
+        KoTEAIndexService service = KoTEAIndexService.getInstance(getProject());
+        service.registerListeners();
+        service.scanProject();
         awaitIndexIdle();
         return KoTEAIndexService.getInstance(getProject()).getIndex();
     }

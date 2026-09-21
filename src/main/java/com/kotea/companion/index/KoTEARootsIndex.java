@@ -1,6 +1,5 @@
 package com.kotea.companion.index;
 
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.psi.PsiClass;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,8 +24,6 @@ import java.util.Set;
  * Each class may only have a single role.
  */
 public final class KoTEARootsIndex {
-
-    private static final Logger LOG = Logger.getInstance(KoTEARootsIndex.class);
 
     public static final KoTEARootsIndex EMPTY = new KoTEARootsIndex(Set.of(), Set.of(), Set.of());
 
@@ -100,8 +97,9 @@ public final class KoTEARootsIndex {
     private Role resolveRole(PsiClass candidate, Map<PsiClass, Set<Role>> rootsAtThisDistance) {
         for (Map.Entry<PsiClass, Set<Role>> entry : rootsAtThisDistance.entrySet()) {
             if (entry.getValue().size() > 1) {
-                LOG.debug("KoTEA: " + candidate.getQualifiedName() + " reaches multi-role Root "
-                        + entry.getKey().getQualifiedName() + " " + entry.getValue() + "; treating as non-navigable");
+                IndexLog.debug(() -> IndexLog.mask(candidate.getQualifiedName()) + " reaches multi-role Root "
+                        + IndexLog.mask(entry.getKey().getQualifiedName()) + " " + entry.getValue()
+                        + "; treating as non-navigable");
                 return null;
             }
         }

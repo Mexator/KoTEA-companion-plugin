@@ -1,11 +1,17 @@
 package com.kotea.companion.index;
 
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil;
+import com.intellij.openapi.module.Module;
+import com.intellij.openapi.roots.ContentEntry;
+import com.intellij.openapi.roots.ModuleRootModificationUtil;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.testFramework.VfsTestUtil;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 
+import java.io.IOException;
 import java.util.Set;
 
 public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
@@ -128,6 +134,112 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
                 getKoTEAIndex());
     }
 
+    public void testAddConcreteEvent_getsItsGutter() {
+        openFixtureProject("indexRebuild");
+
+        patchFixture("feat1/Contract.kt", "data class Feat1Clicked(val id: Int) : Feat1Event",
+                "data class Feat1Clicked(val id: Int) : Feat1Event\ndata class Feat1Swiped(val id: Int) : Feat1Event");
+        awaitIndexIdle();
+
+        assertEquals(BASELINE, getKoTEAIndex());
+        assertTrue(koTEAGutterOwners("feat1/Contract.kt").contains("Feat1Swiped"));
+    }
+
+    public void testRenameRootByRefactoring_keepsGuttersOnTheRenamedHierarchy() {
+        openFixtureProject("indexRebuild");
+
+        myFixture.renameElement(ktClass("feat1/Contract.kt", "Feat1Event"), "Feat1Input");
+        PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+        awaitIndexIdle();
+
+        assertEquals(withEventRoots("feat1.Feat1Input", "feat2.Feat2Event"), getKoTEAIndex());
+        assertEquals(Set.of("Feat1Clicked", "Feat1Load", "Feat1News"), koTEAGutterOwners("feat1/Contract.kt"));
+    }
+
+    public void testDeleteFeatureFolder_removesItsRoots() {
+        openFixtureProject("indexRebuild");
+
+        deleteTempFile("feat2");
+        awaitIndexIdle();
+
+        assertEquals(new KoTEARootsIndex(Set.of("feat1.Feat1Event"), Set.of("feat1.Feat1Command"),
+                Set.of("feat1.Feat1News")), getKoTEAIndex());
+    }
+
+    public void testMoveInFolderWithNewFeature_addsItsRoots() throws IOException {
+        openFixtureProject("indexRebuild");
+        VirtualFile sourceRoot = myFixture.findFileInTempDir("feat1").getParent();
+        VirtualFile staging = WriteAction.computeAndWait(() -> sourceRoot.getParent().createChildDirectory(this, "staging"));
+        try {
+            VirtualFile folder = WriteAction.computeAndWait(() -> staging.createChildDirectory(this, "feat3"));
+            writeFile(folder, "Feat3Update.kt", """
+                    package feat3
+
+                    import feat2.*
+                    import ru.tinkoff.kotea.core.dsl.DslUpdate
+
+                    sealed interface Feat3Event
+                    data class Feat3Tapped(val id: Int) : Feat3Event
+
+                    class Feat3Update : DslUpdate<Feat2State, Feat3Event, Feat2Command, Feat2News>()
+                    """);
+
+            WriteAction.runAndWait(() -> folder.move(this, sourceRoot));
+            awaitIndexIdle();
+
+            assertEquals(withEventRoots("feat1.Feat1Event", "feat2.Feat2Event", "feat3.Feat3Event"),
+                    getKoTEAIndex());
+        } finally {
+            WriteAction.runAndWait(() -> staging.delete(this));
+        }
+    }
+
+    public void testMoveFeatureUpdateIntoTestSources_removesItsRoots() throws IOException {
+        openFixtureProject("indexRebuild");
+        Module module = getModule();
+        VirtualFile sourceRoot = myFixture.findFileInTempDir("feat1").getParent();
+        VirtualFile testRoot = WriteAction.computeAndWait(() -> sourceRoot.getParent().createChildDirectory(this, "tests"));
+        ModuleRootModificationUtil.updateModel(module, model -> model.addContentEntry(testRoot).addSourceFolder(testRoot, true));
+        try {
+            VirtualFile update = myFixture.findFileInTempDir("feat2/Feat2Update.kt");
+            WriteAction.runAndWait(() -> update.move(this, testRoot));
+            awaitIndexIdle();
+
+            assertEquals(new KoTEARootsIndex(Set.of("feat1.Feat1Event"), Set.of("feat1.Feat1Command"),
+                    Set.of("feat1.Feat1News")), getKoTEAIndex());
+        } finally {
+            ModuleRootModificationUtil.updateModel(module, model -> {
+                for (ContentEntry entry : model.getContentEntries()) {
+                    if (testRoot.equals(entry.getFile())) model.removeContentEntry(entry);
+                }
+            });
+            WriteAction.runAndWait(() -> testRoot.delete(this));
+        }
+    }
+
+    public void testSharedBaseTypeArgumentChange_updatesItsDescendantsRoots() {
+        openFixtureProject("intermediateUpdate");
+
+        patchFixture("intermediate/BaseFeatureUpdate.kt", "Nothing>()", "ProfileNews>()");
+        awaitIndexIdle();
+
+        assertEquals(new KoTEARootsIndex(Set.of("intermediate.ProfileEvent"), Set.of("intermediate.ProfileCommand"),
+                Set.of("intermediate.ProfileNews")), getKoTEAIndex());
+    }
+
+    public void testSharedBaseLeavesAndRejoinsKoTEA_dropsAndRestoresItsDescendantsRoots() {
+        KoTEARootsIndex baseline = openFixtureProject("intermediateUpdate");
+
+        patchFixture("intermediate/BaseFeatureUpdate.kt", " : DslUpdate<S, E, C, Nothing>()", "");
+        awaitIndexIdle();
+        KoTEARootsIndex withoutBase = getKoTEAIndex();
+        patchFixture("intermediate/BaseFeatureUpdate.kt", "C : Any>", "C : Any> : DslUpdate<S, E, C, Nothing>()");
+        awaitIndexIdle();
+
+        assertEquals(KoTEARootsIndex.EMPTY, withoutBase);
+        assertEquals(baseline, getKoTEAIndex());
+    }
+
     public void testDisposeDuringRebuild_doesNotThrowFromTeardown() {
         openFixtureProject("indexRebuild");
 
@@ -137,6 +249,11 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
     }
 
     // --- helpers ---
+
+    private static KoTEARootsIndex withEventRoots(String... eventRoots) {
+        return new KoTEARootsIndex(Set.of(eventRoots), Set.of("feat1.Feat1Command", "feat2.Feat2Command"),
+                Set.of("feat1.Feat1News", "feat2.Feat2News"));
+    }
 
     private KoTEARootsIndex getKoTEAIndex() {
         return KoTEAIndexService.getInstance(getProject()).getIndex();
@@ -151,6 +268,11 @@ public class KoTEAIndexRebuildTest extends KoTEAFixtureTestCase {
         assertTrue(relativePath + " has no <" + target + "> to replace", text.contains(target));
         myFixture.saveText(file, text.replace(target, replacement));
         PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+    }
+
+    private void writeFile(VirtualFile directory, String name, String text) throws IOException {
+        VirtualFile file = WriteAction.computeAndWait(() -> directory.createChildData(this, name));
+        WriteAction.runAndWait(() -> VfsUtil.saveText(file, text));
     }
 
     private void deleteTempFile(String relativePath) {

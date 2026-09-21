@@ -48,6 +48,8 @@
                 language="kotlin"
                 implementationClass="com.kotea.companion.news.NewsMarkerProvider"/>
         <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
+        <registryKey key="kotea.index.batched.reads" defaultValue="false"
+                     description="KoTEA index: read in short batches instead of one read action. Applies to projects opened after the change."/>
     </extensions>
 
     <actions>

@@ -1,11 +1,13 @@
 package com.kotea.companion.index;
 
+import com.kotea.companion.index.background.BatchReader;
+import com.kotea.companion.index.model.FileEntry;
+import com.kotea.companion.index.model.UpdateHierarchy;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.components.Service;
-import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.impl.BackgroundableProcessIndicator;
 import com.intellij.openapi.project.DumbService;
@@ -13,108 +15,80 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootEvent;
 import com.intellij.openapi.roots.ModuleRootListener;
 import com.intellij.openapi.util.ModificationTracker;
-import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.SimpleModificationTracker;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.vfs.newvfs.BulkFileListener;
-import com.intellij.openapi.vfs.newvfs.events.VFileDeleteEvent;
-import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiManager;
-import com.intellij.psi.PsiTreeAnyChangeAbstractAdapter;
 import com.intellij.util.concurrency.AppExecutorUtil;
-import com.kotea.companion.util.PerfLog;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
-import org.jetbrains.kotlin.idea.KotlinFileType;
 
-import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 /**
- * Owns up-to-date {@link KoTEARootsIndex} snapshot, and rebuilds it in the background.
+ * Owns the up-to-date {@link KoTEARootsIndex} snapshot. The index is built by one full scan when the project
+ * opens; after that, each change re-reads only the files it can affect.
  */
 @Service(Service.Level.PROJECT)
 public final class KoTEAIndexService implements Disposable {
 
-    private static final Logger LOG = Logger.getInstance(KoTEAIndexService.class);
+    private static final int MAX_ROUNDS = 50;
 
     private final Project project;
+    private final boolean batchedReads = Registry.is("kotea.index.batched.reads", false);
 
     private volatile KoTEARootsIndex snapshot = KoTEARootsIndex.EMPTY;
     private volatile boolean initialized = false;
-    private volatile boolean fullRebuildRequested = false;
-    private final AtomicLong changeCounter = new AtomicLong();
     private final SimpleModificationTracker modificationTracker = new SimpleModificationTracker();
 
-    private final ExecutorService recomputeExecutor =
-            AppExecutorUtil.createBoundedApplicationPoolExecutor("KoTEA index recompute", 1);
-    private final AtomicBoolean recomputePending = new AtomicBoolean(false);
+    private final ExecutorService worker =
+            AppExecutorUtil.createBoundedApplicationPoolExecutor("KoTEA index", 1);
+    private final AtomicBoolean workPending = new AtomicBoolean(false);
+    private final AtomicBoolean scanRequested = new AtomicBoolean(false);
+    private final AtomicBoolean listenersRegistered = new AtomicBoolean(false);
+    private final AtomicLong changeCounter = new AtomicLong();
+    private volatile boolean updateClassMissing = false;
 
-    // Mutated only on the single-threaded recompute executor (see recomputeExecutor).
-    private final Map<VirtualFile, List<UpdateRecord>> recordsByFile = new HashMap<>();
-
-    private final Set<VirtualFile> dirtyFiles = ConcurrentHashMap.newKeySet();
-    private final Set<VirtualFile> deletedFiles = ConcurrentHashMap.newKeySet();
+    private final ChangeCollector changes = new ChangeCollector();
+    // Mutated only on the single-threaded worker.
+    private final UpdateHierarchy hierarchy = new UpdateHierarchy();
 
     public KoTEAIndexService(@NotNull Project project) {
         this.project = project;
     }
 
+    public static KoTEAIndexService getInstance(@NotNull Project project) {
+        return project.getService(KoTEAIndexService.class);
+    }
+
+    /** Starts listening to Kotlin file changes. */
     public void registerListeners() {
+        if (!listenersRegistered.compareAndSet(false, true)) return;
 
-        PsiManager.getInstance(project).addPsiTreeChangeListener(new PsiTreeAnyChangeAbstractAdapter() {
-            @Override
-            protected void onChange(@Nullable PsiFile file) {
-                if (file == null) return;
-                VirtualFile virtualFile = file.getVirtualFile();
-                if (virtualFile == null || !isRelevant(virtualFile)) return;
-                dirtyFiles.add(virtualFile);
-                onChangeDetected();
-            }
-        }, this);
-
-        project.getMessageBus().connect(this).subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
-            @Override
-            public void after(@NotNull List<? extends VFileEvent> events) {
-                for (VFileEvent event : events) {
-                    VirtualFile file = event.getFile();
-                    if (file == null) continue;
-                    if (event instanceof VFileDeleteEvent) {
-                        if (!file.getFileType().equals(KotlinFileType.INSTANCE)) continue;
-                        deletedFiles.add(file);
-                    } else if (isRelevant(file)) {
-                        dirtyFiles.add(file);
-                    }
-                }
-                if (!dirtyFiles.isEmpty() || !deletedFiles.isEmpty()) onChangeDetected();
-            }
-        });
+        changes.register(project, this, this::onChangeDetected);
 
         project.getMessageBus().connect(this).subscribe(ModuleRootListener.TOPIC, new ModuleRootListener() {
             @Override
             public void rootsChanged(@NotNull ModuleRootEvent event) {
-                fullRebuildRequested = true;
-                onChangeDetected();
+                // Root changes matter only until KoTEA itself shows up on the classpath, e.g. after the first import.
+                if (updateClassMissing) scanProject();
             }
         });
-
-        DumbService.getInstance(project).runWhenSmart(this::scheduleRecompute);
     }
 
-    public static KoTEAIndexService getInstance(@NotNull Project project) {
-        return project.getService(KoTEAIndexService.class);
+    /**
+     * Builds the whole index from scratch. Called once when the project opens. Changes that arrive while it runs
+     * are applied after it finishes.
+     */
+    public void scanProject() {
+        scanRequested.set(true);
+        onChangeDetected();
     }
 
     public KoTEARootsIndex getIndex() {
@@ -131,167 +105,174 @@ public final class KoTEAIndexService implements Disposable {
     }
 
     /**
-     * Test hook: {@code true} when no rebuild is running or queued, i.e. every change observed so
+     * Test hook: {@code true} when no work is running or queued, i.e. every change observed so
      * far has been folded into {@link #getIndex()}. Production code reads {@link #getIndex()}
      * directly (it is stale-while-revalidating) and has no need for this.
      */
     @TestOnly
     public boolean isIdle() {
-        return initialized && !recomputePending.get();
+        return initialized && !workPending.get();
     }
 
     @Override
     public void dispose() {
-        // Listeners are unregistered automatically (registered with `this` as parent disposable);
-        // interrupt an in-flight rebuild and drop any queued one.
-        recomputeExecutor.shutdownNow();
-    }
-
-    private boolean isRelevant(VirtualFile file) {
-        return file.getFileType() == KotlinFileType.INSTANCE && ScopeBuilder.getProductionScope(project).contains(file);
+        worker.shutdownNow();
     }
 
     private void onChangeDetected() {
         changeCounter.incrementAndGet();
-        scheduleRecompute();
+        scheduleWork();
     }
 
-    private void scheduleRecompute() {
-        if (!recomputePending.compareAndSet(false, true)) return;
+    private void scheduleWork() {
+        if (!workPending.compareAndSet(false, true)) return;
+        submitWork();
+    }
+
+    private void submitWork() {
         try {
-            recomputeExecutor.execute(this::recompute);
+            worker.execute(this::doWork);
         } catch (RejectedExecutionException e) {
-            // Executor shut down (project closing) - nothing left to do.
-            recomputePending.set(false);
+            // Worker shut down (project closing) - nothing left to do.
+            workPending.set(false);
         }
     }
 
-    private void recompute() {
+    private void doWork() {
         long stamp = changeCounter.get();
         try {
-            if (fullRebuildRequested || !initialized) {
-                runFull(stamp);
-                return;
+            if (scanRequested.getAndSet(false)) {
+                runScan();
+            } else if (initialized) {
+                runCycle();
             }
-
-            Set<VirtualFile> dirtySnapshot = Set.copyOf(dirtyFiles);
-            Set<VirtualFile> deletedSnapshot = Set.copyOf(deletedFiles);
-
-            Map<VirtualFile, List<UpdateRecord>> patched = ReadAction.nonBlocking(
-                            () -> computeIncrementalPatch(dirtySnapshot, deletedSnapshot))
-                    .inSmartMode(project)
-                    .expireWith(this)
-                    .executeSynchronously();
-
-            if (patched == null) {
-                runFull(stamp);
-                return;
-            }
-
-            long recomputeStart = PerfLog.start();
-            for (Map.Entry<VirtualFile, List<UpdateRecord>> entry : patched.entrySet()) {
-                if (entry.getValue().isEmpty()) {
-                    recordsByFile.remove(entry.getKey());
-                } else {
-                    recordsByFile.put(entry.getKey(), entry.getValue());
-                }
-            }
-            for (VirtualFile file : deletedSnapshot) recordsByFile.remove(file);
-
-            publish(
-                    KoTEAIndexComputer.derive(recordsByFile.values()),
-                    stamp,
-                    "incremental (" + dirtySnapshot.size() + " files)",
-                    recomputeStart
-            );
+        } catch (ProcessCanceledException e) {
+            throw e;
+        } catch (Throwable t) {
+            initialized = true;
+            IndexLog.error("KoTEA index update failed", t);
         } finally {
-            recomputePending.set(false);
-            if (changeCounter.get() != stamp || !initialized) scheduleRecompute();
+            if (!worker.isShutdown() && (changeCounter.get() != stamp || scanRequested.get())) {
+                submitWork();
+            } else {
+                workPending.set(false);
+                if (changeCounter.get() != stamp || scanRequested.get()) scheduleWork();
+            }
         }
     }
 
-    private @Nullable Map<VirtualFile, List<UpdateRecord>> computeIncrementalPatch(
-            Set<VirtualFile> dirtySnapshot,
-            Set<VirtualFile> deletedSnapshot
-    ) {
-        Map<VirtualFile, List<UpdateRecord>> patched = new HashMap<>();
-        for (VirtualFile file : dirtySnapshot) {
-            List<UpdateRecord> newRecords = KoTEAIndexComputer.computeForFile(project, file);
-            if (!sameUpdateHierarchy(recordsByFile.getOrDefault(file, List.of()), newRecords)) {
-                return null;
-            }
-            patched.put(file, newRecords);
-        }
-        for (VirtualFile file : deletedSnapshot) {
-            List<UpdateRecord> oldRecords = recordsByFile.get(file);
-            if (oldRecords != null && !oldRecords.isEmpty()) {
-                return null;
-            }
-        }
-        return patched;
-    }
+    private void runScan() {
+        long start = System.nanoTime();
+        changes.clear();
+        DumbService.getInstance(project).waitForSmartMode();
 
-    private void runFull(long stamp) {
-        long recomputeStart = PerfLog.start();
-
+        UpdateScan scan = UpdateScan.fromKoTEABases(project);
+        ScanTimings.reset();
         BackgroundableProcessIndicator indicator =
-                new BackgroundableProcessIndicator(project, "Indexing KoTEA events/commands", null, null, true);
-        Ref<Map<VirtualFile, List<UpdateRecord>>> result = new Ref<>();
-        // runProcess owns the indicator's start/stop lifecycle (and so the status-bar widget's
-        // teardown); wrapProgress makes the read action observe that same indicator's cancellation.
-        ProgressManager.getInstance().runProcess(
-                () -> result.set(ReadAction.nonBlocking(() -> KoTEAIndexComputer.computeAll(project))
-                        .inSmartMode(project)
-                        .expireWith(this)
-                        .wrapProgress(indicator)
-                        .executeSynchronously()),
-                indicator
-        );
+                new BackgroundableProcessIndicator(project, "Indexing KoTEA events/commands", null, null, false);
+        BatchReader reader = new BatchReader(project, this, "Scan", batchedReads, indicator);
+        // runProcess owns the indicator's start/stop lifecycle (and so the status-bar widget's teardown).
+        ProgressManager.getInstance().runProcess(() -> {
+            while (!scan.isDone()) {
+                UpdateScan.Batch batch = reader.read(scan::compute);
+                scan.apply(batch);
+                IndexLog.debug(() -> "Scan batch " + reader.stats().batches() + " finished: " + scan.describe(batch));
+            }
+        }, indicator);
 
-        recordsByFile.clear();
-        recordsByFile.putAll(result.get());
-        publish(KoTEAIndexComputer.derive(recordsByFile.values()), stamp, "full", recomputeStart);
-    }
-
-    private void publish(KoTEARootsIndex newIndex, long stamp, String pathLabel, long recomputeStart) {
-        boolean changed = !newIndex.equals(snapshot);
-        if (changed) {
-            snapshot = newIndex;
-            modificationTracker.incModificationCount();
-        }
+        updateClassMissing = scan.updateClassMissing();
+        hierarchy.replaceAll(scan.entries());
         initialized = true;
-
-        int recordCount = recordsByFile.values().stream().mapToInt(List::size).sum();
-        PerfLog.logElapsed(LOG, "KoTEA index recompute (" + pathLabel + "), " + recordsByFile.size() + " files / "
-                + recordCount + " records, snapshot " + (changed ? "changed" : "unchanged"), recomputeStart);
-
-        if (changed) {
-            ApplicationManager.getApplication().invokeLater(
-                    () -> DaemonCodeAnalyzer.getInstance(project).restart("KoTEA index changed"),
-                    project.getDisposed()
-            );
-        }
-
-        if (changeCounter.get() == stamp) {
-            dirtyFiles.clear();
-            deletedFiles.clear();
-            fullRebuildRequested = false;
-        }
+        boolean changed = publish();
+        BatchReader.Stats stats = reader.stats();
+        IndexLog.debug(() -> "Scan done: " + stats.batches() + " batches, " + stats.cancelled()
+                + " cancelled by writes, " + scan.candidatesChecked() + " candidates checked, "
+                + hierarchy.recordCount() + " Updates in " + hierarchy.fileCount() + " files, " + IndexLog.ms(start)
+                + " ms total (" + timing(stats) + "), result "
+                + (changed ? "changed" : "unchanged") + (updateClassMissing ? ", KoTEA not on the classpath" : ""));
+        IndexLog.debug(ScanTimings::summary);
     }
 
     /**
-     * @return true if oldRecords and newRecords have the same Updates. Checks if Update FQNs did not change as well
-     * as their ancestors.
+     * Applies the recorded changes: re-reads the changed files, then keeps re-reading the files those changes
+     * can affect until nothing changes any more.
      */
-    private static boolean sameUpdateHierarchy(List<UpdateRecord> oldRecords, List<UpdateRecord> newRecords) {
-        Set<UpdateHierarchy> oldKeys = oldRecords.stream().map(UpdateHierarchy::new).collect(Collectors.toSet());
-        Set<UpdateHierarchy> newKeys = newRecords.stream().map(UpdateHierarchy::new).collect(Collectors.toSet());
-        return oldKeys.equals(newKeys);
+    private void runCycle() {
+        long start = System.nanoTime();
+        ChangeCollector.Changes drained = changes.drain();
+        if (drained.isEmpty()) return;
+
+        CycleStats stats = new CycleStats();
+        BatchReader reader = new BatchReader(project, this, "Cycle", batchedReads, null);
+        Map<String, FileEntry> updates = hierarchy.removalsUnder(drained.removedPaths());
+        Set<VirtualFile> toRead = drained.files();
+        for (int round = 0; round < MAX_ROUNDS; round++) {
+            if (toRead.isEmpty() && updates.isEmpty()) break;
+            updates.putAll(readFiles(toRead, round == 0, reader, stats));
+            UpdateHierarchy.HierarchyChanged changed = hierarchy.apply(updates);
+            stats.changed.addAll(changed.fqns());
+
+            // A file read earlier in this cycle is read again when a parent changes: its records are built
+            // from the parent's record.
+            toRead = hierarchy.filesDescendingFrom(changed.fqns());
+            if (!changed.added().isEmpty()) toRead.addAll(walkFrom(changed.added(), reader, stats));
+            updates = new LinkedHashMap<>();
+        }
+
+        boolean changed = publish();
+        IndexLog.debug(() -> "Cycle: " + drained.eventCount() + " dirty, " + stats.changed.size() + " records changed "
+                + IndexLog.maskAll(stats.changed) + ", " + stats.skipped + " files skipped by supertype names, "
+                + stats.reread + " files re-read, " + stats.walks + " walks, result "
+                + (changed ? "changed" : "unchanged") + ", " + IndexLog.ms(start) + " ms (" + timing(reader.stats()) + ")");
     }
 
-    private record UpdateHierarchy(@Nullable String fqn, Set<String> updateAncestorFqns) {
-        UpdateHierarchy(UpdateRecord record) {
-            this(record.fqn(), record.updateAncestorFqns());
-        }
+    private String timing(BatchReader.Stats stats) {
+        return (batchedReads ? "batched reads, " : "one read, ") + stats.cancelled() + " cancelled by writes, "
+                + stats.lostMs() + " ms lost to writes, " + stats.waitMs() + " ms waiting for writes and smart mode";
+    }
+
+    private static final class CycleStats {
+        final Set<String> changed = new HashSet<>();
+        int skipped;
+        int reread;
+        int walks;
+    }
+
+    /**
+     * @param firstRound the files changed themselves, so a file not yet indexed is skipped when it names no known
+     *                   Update in its supertype lists; later rounds re-read indexed descendants and new subclasses
+     */
+    private Map<String, FileEntry> readFiles(Set<VirtualFile> files, boolean firstRound, BatchReader reader,
+                                             CycleStats stats) {
+        ChangedFileReads reads = new ChangedFileReads(project, files, hierarchy.recordsByFqn(), hierarchy.paths(),
+                firstRound ? hierarchy.shortNames() : null);
+        while (!reads.isDone()) reads.apply(reader.read(reads::compute));
+        stats.skipped += reads.skipped();
+        if (!firstRound) stats.reread += reads.fileCount();
+        return reads.entries();
+    }
+
+    /** Finds the classes that extend {@code fqns}, which became Updates in this cycle, and returns their files. */
+    private Set<VirtualFile> walkFrom(Set<String> fqns, BatchReader reader, CycleStats stats) {
+        stats.walks += fqns.size();
+        UpdateScan walk = UpdateScan.fromClasses(project, fqns, hierarchy.recordsByFqn());
+        while (!walk.isDone()) walk.apply(reader.read(walk::compute));
+        Set<VirtualFile> files = new HashSet<>();
+        for (FileEntry entry : walk.entries().values()) files.add(entry.file());
+        return files;
+    }
+
+    /** @return whether the published Roots changed */
+    private boolean publish() {
+        KoTEARootsIndex newIndex = KoTEAIndexComputer.derive(hierarchy.recordsByFile());
+        if (newIndex.equals(snapshot)) return false;
+
+        snapshot = newIndex;
+        modificationTracker.incModificationCount();
+        ApplicationManager.getApplication().invokeLater(
+                () -> DaemonCodeAnalyzer.getInstance(project).restart("KoTEA index changed"),
+                project.getDisposed()
+        );
+        return true;
     }
 }

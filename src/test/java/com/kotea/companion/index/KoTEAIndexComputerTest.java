@@ -1,10 +1,10 @@
 package com.kotea.companion.index;
 
+import com.kotea.companion.index.model.UpdateRecord;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,21 +77,37 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         assertEquals(new KoTEARootsIndex(Set.of("bare.BareEvent"), Set.of("bare.BareCommand"), Set.of()), index);
     }
 
-    public void testComputeForFile_matchesComputeAll_withTypealiasedAndAliasImportedRoots() {
-        myFixture.copyDirectoryToProject("typealiasImport", "");
+    public void testComputeAll_supertypeIsATypealiasOfDslUpdate_findsTheFeatureUpdate() {
+        myFixture.copyDirectoryToProject("typealiasSupertype", "");
 
-        VirtualFile updateFile = myFixture.findFileInTempDir("alias/AliasUpdate.kt");
-        assertNotNull("fixture file not found in temp dir", updateFile);
-
-        List<UpdateRecord> forFile =
-                ReadAction.compute(() -> KoTEAIndexComputer.computeForFile(getProject(), updateFile));
         Map<VirtualFile, List<UpdateRecord>> byFile =
                 ReadAction.compute(() -> KoTEAIndexComputer.computeAll(getProject()));
 
-        assertEquals(new HashSet<>(byFile.get(updateFile)), new HashSet<>(forFile));
+        UpdateRecord record = recordFor(byFile, "tasuper.TaUpdate");
+        assertEquals("tasuper.TaEvent", record.eventRootFqn());
+        assertEquals("tasuper.TaCommand", record.commandRootFqn());
+        assertEquals("tasuper.TaNews", record.newsRootFqn());
+    }
 
-        assertSize(1, forFile);
-        UpdateRecord record = forFile.get(0);
+    public void testComputeAll_dslUpdateImportedUnderAnAlias_findsTheFeatureUpdate() {
+        myFixture.copyDirectoryToProject("aliasedImport", "");
+
+        Map<VirtualFile, List<UpdateRecord>> byFile =
+                ReadAction.compute(() -> KoTEAIndexComputer.computeAll(getProject()));
+
+        UpdateRecord record = recordFor(byFile, "aliasimport.ImportUpdate");
+        assertEquals("aliasimport.ImEvent", record.eventRootFqn());
+        assertEquals("aliasimport.ImCommand", record.commandRootFqn());
+        assertEquals("aliasimport.ImNews", record.newsRootFqn());
+    }
+
+    public void testComputeAll_typealiasedAndAliasImportedRoots_findsTheFeatureUpdate() {
+        myFixture.copyDirectoryToProject("typealiasImport", "");
+
+        Map<VirtualFile, List<UpdateRecord>> byFile =
+                ReadAction.compute(() -> KoTEAIndexComputer.computeAll(getProject()));
+
+        UpdateRecord record = recordFor(byFile, "alias.AliasUpdate");
         assertEquals("alias.RealEvent", record.eventRootFqn());
         assertEquals("alias.contract.RealCommand", record.commandRootFqn());
     }

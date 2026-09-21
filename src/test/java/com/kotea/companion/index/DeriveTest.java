@@ -1,5 +1,6 @@
 package com.kotea.companion.index;
 
+import com.kotea.companion.index.model.UpdateRecord;
 import org.junit.Test;
 
 import java.util.List;
@@ -10,7 +11,7 @@ import static org.junit.Assert.assertEquals;
 public class DeriveTest {
 
     private static UpdateRecord featureUpdate(String fqn, String eventRootFqn, String commandRootFqn, String newsRootFqn) {
-        return new UpdateRecord(fqn, Set.of(), eventRootFqn, commandRootFqn, newsRootFqn);
+        return UpdateRecord.withRoots(fqn, Set.of(), eventRootFqn, commandRootFqn, newsRootFqn);
     }
 
     @Test
@@ -37,9 +38,9 @@ public class DeriveTest {
 
     @Test
     public void projectBaseClassBeneathUpdate_isExcluded_onlyMostDerivedContributes() {
-        UpdateRecord projectBase = new UpdateRecord(
+        UpdateRecord projectBase = UpdateRecord.withRoots(
                 "p.BaseUpdate", Set.of(), "p.BogusEvent", "p.BogusCommand", "p.BogusNews");
-        UpdateRecord featureUpdate = new UpdateRecord(
+        UpdateRecord featureUpdate = UpdateRecord.withRoots(
                 "p.FeatureUpdate", Set.of("p.BaseUpdate"), "p.RealEvent", "p.RealCommand", "p.RealNews");
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(List.of(List.of(projectBase, featureUpdate)));
@@ -51,7 +52,7 @@ public class DeriveTest {
 
     @Test
     public void anonymousUpdate_isTreatedAsAFeatureUpdate() {
-        UpdateRecord anonymous = new UpdateRecord(null, Set.of(), "x.Event", "x.Command", "x.News");
+        UpdateRecord anonymous = UpdateRecord.withRoots(null, Set.of(), "x.Event", "x.Command", "x.News");
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(List.of(List.of(anonymous)));
 
@@ -60,8 +61,8 @@ public class DeriveTest {
 
     @Test
     public void nullRoot_isSkipped_withoutNpe() {
-        UpdateRecord allNull = new UpdateRecord("n.FeatureUpdate", Set.of(), null, null, null);
-        UpdateRecord eventAndNewsOnly = new UpdateRecord("n.OtherUpdate", Set.of(), "n.Event", null, "n.News");
+        UpdateRecord allNull = UpdateRecord.withRoots("n.FeatureUpdate", Set.of(), null, null, null);
+        UpdateRecord eventAndNewsOnly = UpdateRecord.withRoots("n.OtherUpdate", Set.of(), "n.Event", null, "n.News");
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(List.of(List.of(allNull, eventAndNewsOnly)));
 

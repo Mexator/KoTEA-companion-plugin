@@ -37,6 +37,11 @@ The same, for the `News` type parameter. Zero or one per feature — a feature t
 News binds `Nothing` here.
 _Avoid_: Base News, news base class
 
+**Role Binding**:
+How an Update class fills one of the Event, Command, and News roles. A Feature Update binds each
+role to a Root. A generic shared base binds a role to one of its own type parameters, and leaves the
+Root to its subclasses. A role bound to `Nothing` has no Root.
+
 **Concrete Event**:
 A descendant of an Event Root that is neither an interface nor abstract — so Kotlin `object`s,
 `data class`es, and `open class`es qualify, while `sealed` and `abstract` intermediates do not.

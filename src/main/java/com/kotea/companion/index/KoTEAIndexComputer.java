@@ -1,114 +1,154 @@
 package com.kotea.companion.index;
 
-import com.intellij.openapi.diagnostic.Logger;
+import com.kotea.companion.index.model.FileEntry;
+import com.kotea.companion.index.model.KoTEABases;
+import com.kotea.companion.index.model.UpdateRecord;
+import com.kotea.companion.index.resolve.Supertype;
+import com.kotea.companion.index.resolve.SupertypeResolver;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
-import com.intellij.psi.PsiClassType;
-import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
-import com.intellij.psi.PsiReference;
-import com.intellij.psi.PsiSubstitutor;
-import com.intellij.psi.PsiType;
-import com.intellij.psi.PsiTypeParameter;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.ProjectScope;
-import com.intellij.psi.search.searches.ClassInheritorsSearch;
-import com.intellij.psi.util.InheritanceUtil;
-import com.intellij.psi.util.TypeConversionUtil;
-import com.kotea.companion.util.PerfLog;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
-import org.jetbrains.kotlin.asJava.classes.KtLightClass;
-import org.jetbrains.kotlin.psi.*;
+import org.jetbrains.kotlin.name.FqName;
+import org.jetbrains.kotlin.psi.KtClassOrObject;
+import org.jetbrains.kotlin.psi.KtDeclaration;
+import org.jetbrains.kotlin.psi.KtFile;
+import org.jetbrains.kotlin.psi.KtSuperTypeListEntry;
+import org.jetbrains.kotlin.psi.KtTreeVisitorVoid;
+import org.jetbrains.kotlin.psi.psiUtil.KtPsiUtilKt;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 public final class KoTEAIndexComputer {
-
-    private static final Logger LOG = Logger.getInstance(KoTEAIndexComputer.class);
-
-    // https://opensource.tbank.ru/mobile-tech/KoTEA/-/blob/main/core/src/commonMain/kotlin/ru/tinkoff/kotea/core/Update.kt
-    private static final String UPDATE_FQN = "ru.tinkoff.kotea.core.Update";
 
     private KoTEAIndexComputer() {
     }
 
     /**
-     * Full project-wide scan: returns every project class implementing {@code Update}, grouped by the file
-     * that declares it.
+     * Full project-wide scan in the current read action: returns every production class implementing
+     * {@code Update}, grouped by the file that declares it. The service runs the same walk in batches.
      */
     public static Map<VirtualFile, List<UpdateRecord>> computeAll(Project project) {
-        PsiClass updateClass = findUpdateClass(project);
-        if (updateClass == null) return Map.of();
-
-        PsiTypeParameter[] params = updateClass.getTypeParameters();
-        if (params.length < 3) return Map.of();
-
-        GlobalSearchScope productionScope = ScopeBuilder.getProductionScope(project);
-
-        long searchStart = PerfLog.start();
-        Set<PsiClass> hits = new HashSet<>(ClassInheritorsSearch.search(updateClass, productionScope, true).findAll());
-
-        GlobalSearchScope librariesScope = ProjectScope.getLibrariesScope(project);
-        for (PsiClass libraryBase : ClassInheritorsSearch.search(updateClass, librariesScope, true).findAll()) {
-            hits.addAll(ClassInheritorsSearch.search(libraryBase, productionScope, true).findAll());
-        }
-        PerfLog.logElapsed(LOG, "KoTEA full ClassInheritorsSearch found " + hits.size() + " candidates", searchStart);
+        UpdateScan scan = UpdateScan.fromKoTEABases(project);
+        while (!scan.isDone()) scan.apply(scan.compute(Long.MAX_VALUE));
 
         Map<VirtualFile, List<UpdateRecord>> recordsByFile = new HashMap<>();
-        for (PsiClass psiClass : hits) {
-            PsiFile containingFile = psiClass.getContainingFile();
-            VirtualFile virtualFile = containingFile != null ? containingFile.getVirtualFile() : null;
-            if (virtualFile == null) continue;
-            recordsByFile.computeIfAbsent(virtualFile, f -> new ArrayList<>())
-                    .add(buildRecord(psiClass, updateClass, params));
-        }
+        for (FileEntry entry : scan.entries().values()) recordsByFile.put(entry.file(), entry.records());
         return recordsByFile;
     }
 
     /**
-     * The incremental path: re-derives the {@link UpdateRecord}s declared by a single file from its
-     * PSI directly - no literal-name matching, so typealiases and aliased imports resolve correctly.
+     * Everything the index stores about {@code file}, or {@code null} when the file is gone or is not in
+     * {@code scope}.
+     *
+     * @param known records of Updates declared elsewhere, by FQN, for classes that extend them
      */
-    public static List<UpdateRecord> computeForFile(Project project, VirtualFile file) {
-        PsiClass updateClass = findUpdateClass(project);
-        if (updateClass == null) return List.of();
-
-        PsiTypeParameter[] params = updateClass.getTypeParameters();
-        if (params.length < 3) return List.of();
-
+    @Nullable
+    static FileEntry readFile(Project project, VirtualFile file, GlobalSearchScope scope,
+                              Function<String, UpdateRecord> known, @Nullable PsiClass updateClass) {
+        if (!file.isValid() || file.isDirectory() || !scope.contains(file)) return null;
         PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
-        if (!(psiFile instanceof KtFile ktFile)) return List.of();
+        if (!(psiFile instanceof KtFile ktFile)) return null;
+        return new FileEntry(file, computeForFile(ktFile, known, updateClass));
+    }
 
-        List<UpdateRecord> records = new ArrayList<>();
+    /**
+     * False when no class in {@code file} names any of {@code supertypeNames} in its supertype list. Only the
+     * names as written are compared, which the stubs keep, so the file is neither parsed nor resolved.
+     */
+    static boolean mayDeclareUpdate(Project project, VirtualFile file, Set<String> supertypeNames) {
+        PsiFile psiFile = file.isValid() && !file.isDirectory() ? PsiManager.getInstance(project).findFile(file) : null;
+        return !(psiFile instanceof KtFile ktFile) || namesAnySupertype(ktFile.getDeclarations(), supertypeNames);
+    }
+
+    private static boolean namesAnySupertype(List<KtDeclaration> declarations, Set<String> supertypeNames) {
+        for (KtDeclaration declaration : declarations) {
+            if (!(declaration instanceof KtClassOrObject classOrObject)) continue;
+            for (String name : KtPsiUtilKt.getSuperNames(classOrObject)) {
+                if (supertypeNames.contains(name)) return true;
+            }
+            if (namesAnySupertype(classOrObject.getDeclarations(), supertypeNames)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The record for {@code classOrObject}, or {@code null} if none of its supertypes is KoTEA's {@code Update},
+     * {@code DslUpdate} or a class in {@code known}. It is built from the parent's record.
+     */
+    @Nullable
+    static UpdateRecord computeForClass(KtClassOrObject classOrObject, SupertypeResolver resolver,
+                                        Function<String, UpdateRecord> known) {
+        for (KtSuperTypeListEntry entry : classOrObject.getSuperTypeListEntries()) {
+            if (!(resolver.resolve(entry) instanceof Supertype.ClassType type)) continue;
+            UpdateRecord parent = KoTEABases.recordOf(type.fqn());
+            if (parent == null) parent = known.apply(type.fqn());
+            if (parent != null) return parent.subclass(fqnOf(classOrObject), type.arguments()::binding);
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String fqnOf(KtClassOrObject classOrObject) {
+        FqName fqName = classOrObject.getFqName();
+        return fqName != null ? fqName.asString() : null;
+    }
+
+    /**
+     * Classes of one file may extend each other in any order, so records are built in rounds until no more
+     * are found. Classes declared here are never looked up in {@code known}, which may be out of date for them.
+     */
+    private static List<UpdateRecord> computeForFile(KtFile ktFile, Function<String, UpdateRecord> known,
+                                                     @Nullable PsiClass updateClass) {
+        if (updateClass == null) return List.of();
+        List<KtClassOrObject> pending = new ArrayList<>();
+        Set<String> declared = new HashSet<>();
         ktFile.accept(new KtTreeVisitorVoid() {
             @Override
             public void visitClassOrObject(@NotNull KtClassOrObject classOrObject) {
                 super.visitClassOrObject(classOrObject);
                 if (classOrObject.getSuperTypeListEntries().isEmpty()) return;
-
-                PsiClass lightClass = LightClassUtilsKt.toLightClass(classOrObject);
-                if (lightClass == null || !InheritanceUtil.isInheritorOrSelf(lightClass, updateClass, true)) return;
-
-                records.add(buildRecord(lightClass, updateClass, params));
+                pending.add(classOrObject);
+                String fqn = fqnOf(classOrObject);
+                if (fqn != null) declared.add(fqn);
             }
         });
+
+        SupertypeResolver resolver = new SupertypeResolver(ktFile.getProject());
+        Map<String, UpdateRecord> inFile = new HashMap<>();
+        Function<String, UpdateRecord> lookup = fqn -> declared.contains(fqn) ? inFile.get(fqn) : known.apply(fqn);
+        List<UpdateRecord> records = new ArrayList<>();
+        boolean found = true;
+        while (found) {
+            found = false;
+            for (Iterator<KtClassOrObject> it = pending.iterator(); it.hasNext(); ) {
+                UpdateRecord record = computeForClass(it.next(), resolver, lookup);
+                if (record == null) continue;
+                it.remove();
+                records.add(record);
+                if (record.fqn() != null) inFile.put(record.fqn(), record);
+                found = true;
+            }
+        }
         return records;
     }
 
     /**
-     * Builds {@link KoTEARootsIndex} out of provided {@link UpdateRecord}s.
+     * Builds {@link KoTEARootsIndex} out of provided {@link UpdateRecord}s. Only Feature Updates contribute: a
+     * record that another record lists as an ancestor is a shared base.
      */
     public static KoTEARootsIndex derive(Collection<List<UpdateRecord>> recordsByFile) {
         List<UpdateRecord> all = new ArrayList<>();
@@ -132,107 +172,8 @@ public final class KoTEAIndexComputer {
     }
 
     @Nullable
-    private static PsiClass findUpdateClass(Project project) {
+    static PsiClass findUpdateClass(Project project) {
         GlobalSearchScope allScope = GlobalSearchScope.allScope(project);
-        return JavaPsiFacade.getInstance(project).findClass(UPDATE_FQN, allScope);
-    }
-
-    private static UpdateRecord buildRecord(PsiClass psiClass, PsiClass updateClass, PsiTypeParameter[] params) {
-        // Update params: <State, Event, Command, News>
-        PsiSubstitutor substitutor = TypeConversionUtil.getSuperClassSubstitutor(updateClass, psiClass, PsiSubstitutor.EMPTY);
-        PsiClass eventClass = resolveClassArg(substitutor.substitute(params[1]));
-        PsiClass commandClass = resolveClassArg(substitutor.substitute(params[2]));
-        PsiClass newsClass = params.length > 3 ? resolveClassArg(substitutor.substitute(params[3])) : null;
-
-        // kotlinc cannot encode a JVM generic signature with `Nothing`
-        // Fall back to reading the type arguments straight out of Kotlin source
-        if (eventClass == null || commandClass == null || newsClass == null) {
-            PsiClass[] fromSource = resolveRootsFromKotlinSource(psiClass, updateClass);
-            if (eventClass == null) eventClass = fromSource[0];
-            if (commandClass == null) commandClass = fromSource[1];
-            if (newsClass == null) newsClass = fromSource[2];
-        }
-
-        return new UpdateRecord(
-                psiClass.getQualifiedName(),
-                collectUpdateAncestorFqns(psiClass, updateClass),
-                eventClass != null ? eventClass.getQualifiedName() : null,
-                commandClass != null ? commandClass.getQualifiedName() : null,
-                newsRootFqnOf(newsClass));
-    }
-
-    /**
-     * @return FQNs of {@code psiClass}'s supers (excluding itself and {@code updateClass})
-     */
-    private static Set<String> collectUpdateAncestorFqns(PsiClass psiClass, PsiClass updateClass) {
-        Set<String> ancestorFqns = new HashSet<>();
-        InheritanceUtil.processSupers(psiClass, false, ancestor -> {
-            String fqn = ancestor.getQualifiedName();
-            if (fqn != null && !UPDATE_FQN.equals(fqn) && InheritanceUtil.isInheritorOrSelf(ancestor, updateClass, true)) {
-                ancestorFqns.add(fqn);
-            }
-            return true;
-        });
-        return ancestorFqns;
-    }
-
-    @Nullable
-    private static PsiClass resolveClassArg(@Nullable PsiType type) {
-        return type instanceof PsiClassType classType ? classType.resolve() : null;
-    }
-
-    /** {@code Nothing} bound to {@code News} means the feature emits no News, so there is no News Root. */
-    @Nullable
-    private static String newsRootFqnOf(@Nullable PsiClass newsClass) {
-        if (newsClass == null) return null;
-        String fqn = newsClass.getQualifiedName();
-        return "kotlin.Nothing".equals(fqn) ? null : fqn;
-    }
-
-    /** @return {@code [Event, Command, News]} Root classes read straight out of Kotlin source; entries may be null. */
-    private static PsiClass[] resolveRootsFromKotlinSource(PsiClass leaf, PsiClass updateClass) {
-        PsiClass[] result = new PsiClass[3];
-        if (!(leaf instanceof KtLightClass lightClass)) return result;
-        KtClassOrObject ktClass = lightClass.getKotlinOrigin();
-        if (ktClass == null) return result;
-
-        for (KtSuperTypeListEntry entry : ktClass.getSuperTypeListEntries()) {
-            KtTypeReference typeRef = entry.getTypeReference();
-            KtTypeElement typeElement = typeRef != null ? typeRef.getTypeElement() : null;
-            if (!(typeElement instanceof KtUserType userType)) continue;
-
-            PsiClass superClass = resolveUserTypeClass(userType);
-            if (!InheritanceUtil.isInheritorOrSelf(superClass, updateClass, true)) continue;
-
-            List<KtTypeProjection> typeArgs = userType.getTypeArguments();
-            if (typeArgs.size() < 3) continue;
-
-            result[0] = resolveTypeArgumentClass(typeArgs.get(1));
-            result[1] = resolveTypeArgumentClass(typeArgs.get(2));
-            if (typeArgs.size() > 3) result[2] = resolveTypeArgumentClass(typeArgs.get(3));
-            return result;
-        }
-        return result;
-    }
-
-    @Nullable
-    private static PsiClass resolveTypeArgumentClass(KtTypeProjection projection) {
-        KtTypeReference typeRef = projection.getTypeReference();
-        KtTypeElement typeElement = typeRef != null ? typeRef.getTypeElement() : null;
-        return typeElement instanceof KtUserType userType ? resolveUserTypeClass(userType) : null;
-    }
-
-    @Nullable
-    private static PsiClass resolveUserTypeClass(KtUserType userType) {
-        KtReferenceExpression ref = userType.getReferenceExpression();
-        PsiReference psiRef = ref != null ? ref.getReference() : null;
-        PsiElement resolved = psiRef != null ? psiRef.resolve() : null;
-        if (resolved == null) return null;
-
-        return switch (resolved) {
-            case KtClassOrObject ktClass -> LightClassUtilsKt.toLightClass(ktClass);
-            case KtConstructor<?> constructor -> LightClassUtilsKt.toLightClass(constructor.getContainingClassOrObject());
-            default -> null;
-        };
+        return JavaPsiFacade.getInstance(project).findClass(KoTEABases.UPDATE_FQN, allScope);
     }
 }

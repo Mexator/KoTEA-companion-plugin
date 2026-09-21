@@ -29,6 +29,20 @@ At project startup, the plugin indexes all implementations of `ru.tinkoff.kotea.
 are resolved as root classes for Events, Commands and News. These are called Roots. For each subclass of a Root,
 the plugin adds a gutter icon and hotkey actions.
 
+The index is built once when the project opens. After that, it only re-reads the Kotlin files that changed, and
+the files those changes can affect. Builds and Gradle syncs cause no index work.
+
+## Debug logging
+
+To see what the index does, open **Help** > **Diagnostic Tools** > **Debug Log Settings...** and add this line:
+
+```
+#com.kotea.companion.index
+```
+
+The log goes to `idea.log`. Class names in it have their packages shortened to initials (`com.example.SomeEvent`
+becomes `c.e.SomeEvent`).
+
 ## Known Issues / Limitations
 
 * Each class is resolved to a single KoTEA entity. For example, if a class implements both Command and News, it is 

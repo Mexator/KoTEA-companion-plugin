@@ -1,5 +1,6 @@
 package com.kotea.companion.index;
 
+import com.kotea.companion.index.model.UpdateRecord;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.testFramework.LightProjectDescriptor;
