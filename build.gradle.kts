@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.3.1-incremental-imports3"
+version = "1.4.0"
 
 repositories {
     mavenCentral()
@@ -61,12 +61,10 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.3.0</b>
+                <li><b>1.4.0</b>
                     <ul>
-                        <li>Feature: Added navigation for News (to Emission/Processing)</li>
-                        <li>Fix: The KoTEA context menu now only appears on KoTEA elements</li>
-                        <li>Fix: An Event reference in a KDoc comment is no longer treated as an emission site</li>
-                        <li>Fix: Emission/Processing gutter icons are no longer shown in the diff viewer</li>
+                        <li>Change: The index is built only once: when the project opens. After that, it is only edited incrementally.</li>
+                        <li>Change: Drop PSI analysis api to build list of Events, Commands, News roots. Now using simplified solution.</li>
                     </ul>
                 </li>
             </ul>
