@@ -16,7 +16,7 @@ import com.intellij.psi.tree.TokenSet;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.kotea.companion.domain.KoTEAClassifier;
 import com.kotea.companion.domain.KoTEARoleResolver;
-import com.kotea.companion.util.KoTEAClassSupport;
+import com.kotea.companion.util.ClassReferenceResolver;
 import com.kotea.companion.util.KoTEAElementKind;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,7 +49,7 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
         if (ref == null) return null;
         if (PsiTreeUtil.getParentOfType(ref, KtImportDirective.class, KtSuperTypeList.class) != null) return null;
 
-        KtClassOrObject target = KoTEAClassSupport.resolveClassOrObject(ref);
+        KtClassOrObject target = ClassReferenceResolver.resolveClassOrObject(ref);
         if (target == null) return null;
         KoTEAElementKind kind = KoTEAClassifier.getInstance(project).kindOf(target);
         if (kind == null) return null;

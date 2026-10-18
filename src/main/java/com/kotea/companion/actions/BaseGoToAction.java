@@ -1,40 +1,25 @@
 package com.kotea.companion.actions;
 
-import com.intellij.codeInsight.hint.HintManager;
-import com.intellij.codeInsight.navigation.PsiTargetNavigator;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.openapi.progress.Task;
-import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.GlobalSearchScope;
-import com.kotea.companion.util.ContextPresentationProvider;
+import com.kotea.companion.domain.KoTEARoleResolver.Role;
+import com.kotea.companion.navigation.NavigationRunner;
 import com.kotea.companion.util.NavigableElement;
 import com.kotea.companion.util.NavigableElementResolver;
-import com.kotea.companion.util.PerfLog;
-import com.kotea.companion.util.ScopeBuilder;
-import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.List;
 
 public abstract class BaseGoToAction extends AnAction {
 
-    private static final Logger LOG = Logger.getInstance(BaseGoToAction.class);
+    private final Role role;
 
-    protected abstract List<PsiElement> findTargets(NavigableElement target, GlobalSearchScope scope);
-
-    protected abstract String getTitle();
-
-    protected abstract String getOperation();
+    protected BaseGoToAction(@NotNull Role role) {
+        this.role = role;
+    }
 
     @Override
     public void update(@NotNull AnActionEvent e) {
@@ -56,55 +41,7 @@ public abstract class BaseGoToAction extends AnAction {
         NavigableElement target = NavigableElementResolver.resolve(element);
         if (target == null) return;
 
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(element);
-        executeSearch(editor, target, scope);
-    }
-
-    private void executeSearch(Editor editor, NavigableElement target, GlobalSearchScope scope) {
-        String lockKey = lockKey(target.anchor());
-        if (!SearchLock.tryLock(lockKey)) {
-            HintManager.getInstance().showInformationHint(editor, "Search already in progress");
-            return;
-        }
-
-        ProgressManager.getInstance().run(new Task.Backgroundable(target.anchor().getProject(), getTitle(), true) {
-            @Override
-            public void run(@NotNull ProgressIndicator indicator) {
-                indicator.setIndeterminate(true);
-                try {
-                    long start = PerfLog.start();
-                    List<PsiElement> targets = ReadAction.compute(() -> findTargets(target, scope));
-                    PerfLog.logElapsed(LOG, getOperation() + " search", start);
-                    if (indicator.isCanceled()) return;
-
-                    ApplicationManager.getApplication().invokeLater(() -> {
-                        if (targets == null || targets.isEmpty()) {
-                            HintManager.getInstance().showInformationHint(editor,
-                                    "No " + getOperation().toLowerCase() + " usages found.");
-                            return;
-                        }
-                        if (targets.size() == 1) {
-                            ((Navigatable) targets.getFirst()).navigate(true);
-                        } else {
-                            new PsiTargetNavigator<>(targets)
-                                    .presentationProvider(ContextPresentationProvider::getPresentation)
-                                    .createPopup(editor.getProject(), getTitle())
-                                    .showInBestPositionFor(editor);
-                        }
-                    });
-                } finally {
-                    SearchLock.unlock(lockKey);
-                }
-            }
-        });
-    }
-
-    private String lockKey(PsiElement targetClass) {
-        var file = targetClass.getContainingFile();
-        if (file != null && file.getVirtualFile() != null) {
-            return file.getVirtualFile().getPath() + ":" + targetClass.getTextOffset() + ":" + getOperation();
-        }
-        return System.identityHashCode(targetClass) + ":" + getOperation();
+        NavigationRunner.navigate(target.anchor(), role, element, false, NavigationRunner.inEditor(editor));
     }
 
     @Override

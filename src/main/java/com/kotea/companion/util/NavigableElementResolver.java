@@ -1,15 +1,16 @@
 package com.kotea.companion.util;
 
+import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
-import com.kotea.companion.commands.CommandUtil;
-import com.kotea.companion.events.EventUtil;
-import com.kotea.companion.news.NewsUtil;
+import com.intellij.psi.PsiModifier;
+import com.kotea.companion.domain.KoTEAClassifier;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
 /**
  * Resolves a PSI element to the {@link NavigableElement} (if any).
- * Answers the question: "is a PSI element a KoTEA class and what is its kind (Event or a Command)?"
+ * Answers the question: "is a PSI element references a KoTEA class and what is its kind?"
  */
 public final class NavigableElementResolver {
 
@@ -18,18 +19,13 @@ public final class NavigableElementResolver {
 
     @Nullable
     public static NavigableElement resolve(PsiElement element) {
-        KtClassOrObject eventClass = EventUtil.tryResolveToClass(element);
-        if (eventClass != null) {
-            return new NavigableElement(KoTEAElementKind.EVENT, eventClass);
-        }
-        KtClassOrObject newsClass = NewsUtil.tryResolveToClass(element);
-        if (newsClass != null) {
-            return new NavigableElement(KoTEAElementKind.NEWS, newsClass);
-        }
-        KtClassOrObject commandClass = CommandUtil.tryResolveToClass(element);
-        if (commandClass != null) {
-            return new NavigableElement(KoTEAElementKind.COMMAND, commandClass);
-        }
-        return null;
+        KtClassOrObject candidate = ClassReferenceResolver.resolveClassOrObject(element);
+        if (candidate == null) return null;
+        KoTEAElementKind kind = KoTEAClassifier.getInstance(candidate.getProject()).kindOf(candidate);
+        if (kind == null) return null;
+        PsiClass lightClass = LightClassUtilsKt.toLightClass(candidate);
+        boolean concrete = lightClass != null && !lightClass.isInterface()
+                && !lightClass.hasModifierProperty(PsiModifier.ABSTRACT);
+        return concrete ? new NavigableElement(kind, candidate) : null;
     }
 }

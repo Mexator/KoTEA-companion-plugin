@@ -7,11 +7,9 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.containers.ContainerUtil;
-import com.kotea.companion.commands.CommandEmissionSearcher;
-import com.kotea.companion.commands.CommandProcessingSearcher;
-import com.kotea.companion.events.EventEmissionSearcher;
-import com.kotea.companion.events.EventProcessingSearcher;
+import com.kotea.companion.domain.KoTEARoleResolver.Role;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
+import com.kotea.companion.navigation.EmissionOrProcessingSearcher;
 import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
@@ -31,22 +29,22 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     public void testEventCheckedOutsideUpdate_isProcessing() {
-        assertEquals(Set.of("Analytics.kt:6"), sites("Reset", EventProcessingSearcher::findProcessing));
-        assertEquals(Set.of("DecoratorUpdate.kt:9", "Analytics.kt:7"), sites("Clicked", EventProcessingSearcher::findProcessing));
+        assertEquals(Set.of("Analytics.kt:6"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
+        assertEquals(Set.of("DecoratorUpdate.kt:9", "Analytics.kt:7"), sites("Clicked", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
         assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/Analytics.kt", "is RhEvent.Reset", "Reset"));
     }
 
     public void testEventConstructedInsideDecoratorUpdate_isEmission() {
-        assertEquals(Set.of("DecoratorUpdate.kt:11"), sites("InvalidateCache", EventEmissionSearcher::findEmissions));
-        assertEquals(Set.of("RealUpdate.kt:8"), sites("InvalidateCache", EventProcessingSearcher::findProcessing));
+        assertEquals(Set.of("DecoratorUpdate.kt:11"), sites("InvalidateCache", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RealUpdate.kt:8"), sites("InvalidateCache", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
         assertEquals(Set.of(PluginIcons.PROCESSING),
                 guttersAt("rh/DecoratorUpdate.kt", "RealEvent.InvalidateCache,", "InvalidateCache"));
     }
 
     public void testEventEmissions_includeObjectsAndCallableReferences() {
-        assertEquals(Set.of("RhScreen.kt:8"), sites("Reset", EventEmissionSearcher::findEmissions));
-        assertEquals(Set.of("RhScreen.kt:12"), sites("Clicked", EventEmissionSearcher::findEmissions));
-        assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", EventEmissionSearcher::findEmissions));
+        assertEquals(Set.of("RhScreen.kt:8"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RhScreen.kt:12"), sites("Clicked", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
     }
 
     public void testTypeOnlyUsages_haveNoGutter() {
@@ -55,8 +53,8 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     public void testCommandProcessing_staysInsideCommandsFlowHandler() {
-        assertEquals(Set.of("RhHandler.kt:11"), sites("Load", CommandProcessingSearcher::findProcessing));
-        assertEquals(Set.of("DecoratorUpdate.kt:14", "RealUpdate.kt:8"), sites("Load", CommandEmissionSearcher::findEmission));
+        assertEquals(Set.of("RhHandler.kt:11"), sites("Load", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
+        assertEquals(Set.of("DecoratorUpdate.kt:14", "RealUpdate.kt:8"), sites("Load", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
         assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/RhHandler.kt", "filterIsInstance<RhCommand.Load>", "Load"));
         assertEquals(Set.of(), guttersAt("rh/Analytics.kt", "is RhCommand.Load", "Load"));
     }

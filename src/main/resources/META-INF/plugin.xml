@@ -40,13 +40,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.lineMarkerProvider
                 language="kotlin"
-                implementationClass="com.kotea.companion.commands.CommandMarkerProvider"/>
-        <codeInsight.lineMarkerProvider
-                language="kotlin"
-                implementationClass="com.kotea.companion.events.EventMarkerProvider"/>
-        <codeInsight.lineMarkerProvider
-                language="kotlin"
-                implementationClass="com.kotea.companion.news.NewsMarkerProvider"/>
+                implementationClass="com.kotea.companion.navigation.KoTEAMarkerProvider"/>
         <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
         <projectService serviceInterface="com.kotea.companion.domain.KoTEAClassifier"
                         serviceImplementation="com.kotea.companion.domain.impl.KoTEAClassifierImpl"/>
