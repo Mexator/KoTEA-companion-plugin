@@ -19,10 +19,10 @@ import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiReference;
+import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
+import com.kotea.companion.domain.KoTEARoleResolver;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
 import com.kotea.companion.util.PerfLog;
@@ -30,7 +30,6 @@ import com.kotea.companion.util.PluginIcons;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.psi.*;
 
 import javax.swing.*;
@@ -59,18 +58,12 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
 
         addClassMarker(element, result);
         long afterClass = System.nanoTime();
-        addConstructorCallMarker(element, result);
-        long afterConstructor = System.nanoTime();
-        addObjectMarker(element, result);
-        long afterObject = System.nanoTime();
-        addInHandle(element, result);
-        long afterInHandle = System.nanoTime();
+        addReferenceMarker(element, result);
+        long afterReference = System.nanoTime();
 
         PerfLog.warnIfSlow(LOG, "CommandMarkerProvider marker collection for " + element + " is slow; " +
                 "class: " + (afterClass - start) / 1_000_000 + " ms, " +
-                "constructor: " + (afterConstructor - afterClass) / 1_000_000 + " ms, " +
-                "object: " + (afterObject - afterConstructor) / 1_000_000 + " ms, " +
-                "inHandle: " + (afterInHandle - afterObject) / 1_000_000 + " ms",
+                "reference: " + (afterReference - afterClass) / 1_000_000 + " ms",
                 start, 10);
     }
 
@@ -84,61 +77,22 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         result.add(getMarker(identifier, command, PluginIcons.PROCESSING, "Go to Processing", CommandProcessingSearcher::findProcessing));
     }
 
-    private void addConstructorCallMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        if (!(element instanceof KtCallExpression call)) return;
-        if (!(call.getCalleeExpression() instanceof KtReferenceExpression callee)) return;
+    private void addReferenceMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
+        if (!(element instanceof LeafPsiElement) || !(element.getParent() instanceof KtNameReferenceExpression)) return;
 
-        PsiElement resolved = resolve(callee);
-        KtClassOrObject constructedClass = resolved instanceof KtConstructor<?> constructor
-                ? constructor.getContainingClassOrObject()
-                : resolved instanceof KtClass ktClass ? ktClass : null;
-        if (constructedClass != null && CommandUtil.isNavigableCommandClass(constructedClass)) {
-            result.add(getMarker(element, constructedClass, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing));
-        }
-    }
+        KtClassOrObject command = CommandUtil.tryResolveToClass(element);
+        if (command == null) return;
 
-    private void addObjectMarker(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        if (!(element instanceof KtNameReferenceExpression ref) || !isCallArgument(ref)) return;
-
-        if (resolve(ref) instanceof KtClassOrObject command && CommandUtil.isNavigableCommandClass(command)) {
+        KoTEARoleResolver.Role role = KoTEARoleResolver.getInstance(element.getProject()).roleOf(element);
+        if (role == KoTEARoleResolver.Role.PROCESSING) {
+            result.add(getMarker(element, command, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission));
+        } else if (role == KoTEARoleResolver.Role.EMISSION) {
             result.add(getMarker(element, command, PluginIcons.PROCESSING, "Processing", CommandProcessingSearcher::findProcessing));
         }
     }
 
-    private void addInHandle(PsiElement element, Collection<? super RelatedItemLineMarkerInfo<?>> result) {
-        if (!(element instanceof KtNameReferenceExpression ref)) return;
-
-        KtClassOrObject handler = PsiTreeUtil.getParentOfType(ref, KtClassOrObject.class);
-        if (handler == null) return;
-
-        if (!(resolve(ref) instanceof KtClassOrObject targetCommand)) return;
-        if (targetCommand instanceof KtClass ktClass && ktClass.isInterface()) return;
-
-        if (!CommandUtil.isCommandsHandler(handler, targetCommand)) return;
-
-        result.add(getMarker(element, targetCommand, PluginIcons.EMISSION, "Emission", CommandEmissionSearcher::findEmission));
-    }
-
-    /** {@code ref} is a call argument by itself, or as either side of a qualified expression. */
-    private static boolean isCallArgument(KtNameReferenceExpression ref) {
-        PsiElement parent = ref.getParent();
-        if (parent instanceof KtQualifiedExpression) parent = parent.getParent();
-        return parent instanceof KtValueArgument
-                && parent.getParent() instanceof KtValueArgumentList list
-                && list.getParent() instanceof KtCallExpression;
-    }
-
-    @Nullable
-    private static PsiElement resolve(KtReferenceExpression ref) {
-        PsiReference reference = ref.getReference();
-        PsiElement resolved = reference != null ? reference.resolve() : null;
-        return resolved != null ? resolved.getNavigationElement() : null;
-    }
-
     private RelatedItemLineMarkerInfo<PsiElement> getMarker(PsiElement element, KtClassOrObject targetCommand, Icon icon, String title,
                                                             BiFunction<KtClassOrObject, GlobalSearchScope, List<PsiElement>> searchFunc) {
-        PsiElement anchor = leafOf(element);
-
         GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) -> {
             Editor editor = FileEditorManager.getInstance(elt.getProject()).getSelectedTextEditor();
             if (editor == null) return;
@@ -160,7 +114,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                         indicator.setText("Searching in module...");
                         long moduleSearchStart = PerfLog.start();
                         List<PsiElement> targets = ReadAction.compute(() ->
-                                searchFunc.apply(targetCommand, ScopeBuilder.getModuleScope(anchor)));
+                                searchFunc.apply(targetCommand, ScopeBuilder.getModuleScope(element)));
                         PerfLog.logElapsed(LOG, "CommandMarkerProvider module-scope " + title + " search",
                                 moduleSearchStart);
 
@@ -169,7 +123,7 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
                             indicator.setText("Searching in project...");
                             long projectSearchStart = PerfLog.start();
                             targets = ReadAction.compute(() ->
-                                    searchFunc.apply(targetCommand, ScopeBuilder.getProductionScope(anchor)));
+                                    searchFunc.apply(targetCommand, ScopeBuilder.getProductionScope(element)));
                             PerfLog.logElapsed(LOG, "CommandMarkerProvider project-scope " + title + " search",
                                     projectSearchStart);
                             scope = "project";
@@ -190,23 +144,14 @@ public class CommandMarkerProvider extends RelatedItemLineMarkerProvider {
         };
 
         return new KoteaCompanionLineMarkerInfo<>(
-                anchor,
-                anchor.getTextRange(),
+                element,
+                element.getTextRange(),
                 icon,
                 elt -> title,
                 navHandler,
                 GutterIconRenderer.Alignment.CENTER,
                 List::of
         );
-    }
-
-    /** First leaf under {@code element} (or {@code element} itself if it has no children). */
-    private static PsiElement leafOf(PsiElement element) {
-        PsiElement leaf = element;
-        while (leaf.getFirstChild() != null) {
-            leaf = leaf.getFirstChild();
-        }
-        return leaf;
     }
 
     private void showResults(List<PsiElement> targets, String title, String scope, MouseEvent mouseEvent, PsiElement elt) {

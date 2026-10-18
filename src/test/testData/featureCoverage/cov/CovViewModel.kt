@@ -1,6 +1,6 @@
 package cov
 
-/** Not a *Update* / *Handler* file, so references here are Emission sites. */
+/** Constructs Events, so references here are Emission sites. */
 class CovViewModel {
 
     private val events = ArrayList<FeatureEvent>()

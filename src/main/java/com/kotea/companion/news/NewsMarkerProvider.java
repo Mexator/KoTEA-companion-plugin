@@ -23,12 +23,11 @@ import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.awt.RelativePoint;
+import com.kotea.companion.domain.KoTEARoleResolver;
 import com.kotea.companion.util.ContextPresentationProvider;
-import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.KoteaCompanionLineMarkerInfo;
 import com.kotea.companion.util.PerfLog;
 import com.kotea.companion.util.PluginIcons;
-import com.kotea.companion.util.RoleResolver;
 import com.kotea.companion.util.ScopeBuilder;
 import com.kotea.companion.util.SearchLock;
 import org.jetbrains.annotations.NotNull;
@@ -81,14 +80,14 @@ public class NewsMarkerProvider extends RelatedItemLineMarkerProvider {
         if (targetClass == null || !NewsUtil.isNavigableNewsClass(targetClass)) return;
 
         boolean isDeclaration = element.getParent() == targetClass;
-        boolean atProcessingSite = RoleResolver.roleOf(element, KoTEAElementKind.NEWS)
-                == RoleResolver.Role.PROCESSING;
+        KoTEARoleResolver.Role role = isDeclaration ? null
+                : KoTEARoleResolver.getInstance(element.getProject()).roleOf(element);
 
-        if (isDeclaration || atProcessingSite) {
+        if (isDeclaration || role == KoTEARoleResolver.Role.PROCESSING) {
             result.add(createMarker(element, targetClass, PluginIcons.EMISSION, "Emission", NewsEmissionSearcher::findEmissions));
         }
 
-        if (isDeclaration || !atProcessingSite) {
+        if (isDeclaration || role == KoTEARoleResolver.Role.EMISSION) {
             result.add(createMarker(element, targetClass, PluginIcons.PROCESSING, "Processing", NewsProcessingSearcher::findProcessing));
         }
 

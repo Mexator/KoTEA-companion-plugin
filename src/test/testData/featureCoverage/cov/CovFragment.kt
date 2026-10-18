@@ -1,6 +1,6 @@
 package cov
 
-/** Not a *Update* file, so News references here are Processing sites. */
+/** Checks News against types, so News references here are Processing sites. */
 class CovFragment {
 
     fun onNews(news: FeatureNews) {
