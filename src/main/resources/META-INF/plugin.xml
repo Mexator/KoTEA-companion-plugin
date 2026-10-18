@@ -48,6 +48,8 @@
                 language="kotlin"
                 implementationClass="com.kotea.companion.news.NewsMarkerProvider"/>
         <postStartupActivity implementation="com.kotea.companion.startup.KoTEAStartupActivity"/>
+        <projectService serviceInterface="com.kotea.companion.domain.KoTEAClassifier"
+                        serviceImplementation="com.kotea.companion.domain.impl.KoTEAClassifierImpl"/>
         <registryKey key="kotea.index.batched.reads" defaultValue="true"
                      description="KoTEA index: read in short batches instead of one read action. Applies to projects opened after the change."/>
     </extensions>

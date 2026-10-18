@@ -12,8 +12,6 @@ public sealed interface RoleBinding {
 
     None NONE = new None();
 
-    String NOTHING_FQN = "kotlin.Nothing";
-
     record Root(String fqn) implements RoleBinding {
     }
 
@@ -21,22 +19,22 @@ public sealed interface RoleBinding {
     record FromTypeParameter(int index) implements RoleBinding {
     }
 
-    /** No Root: the role is bound to {@code Nothing}, or its type argument could not be read. */
+    /** No Root: the type argument could not be read. */
     record None() implements RoleBinding {
     }
 
-    /** {@code Nothing} binds no Root: a feature that emits no News binds it to {@code News}. */
+    /** {@code fqn} as written, {@code Nothing} included: which types are real Roots is up to the classifier. */
     static RoleBinding root(@Nullable String fqn) {
-        return fqn == null || NOTHING_FQN.equals(fqn) ? NONE : new Root(fqn);
+        return fqn == null ? NONE : new Root(fqn);
     }
 
     /** This binding as seen by a subclass that passes {@code arguments} to the class that holds it. */
     default RoleBinding inSubclass(IntFunction<RoleBinding> arguments) {
-        return this instanceof FromTypeParameter parameter ? arguments.apply(parameter.index()) : this;
+        return this instanceof FromTypeParameter(int index) ? arguments.apply(index) : this;
     }
 
     @Nullable
     default String rootFqn() {
-        return this instanceof Root root ? root.fqn() : null;
+        return this instanceof Root(String fqn) ? fqn : null;
     }
 }

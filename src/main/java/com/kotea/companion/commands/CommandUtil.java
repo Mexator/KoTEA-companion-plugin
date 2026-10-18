@@ -1,11 +1,11 @@
 package com.kotea.companion.commands;
 
-import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.*;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.kotea.companion.index.KoTEAIndexService;
+import com.kotea.companion.domain.KoTEAClassifier;
+import com.kotea.companion.util.KoTEAElementKind;
 import com.kotea.companion.util.KoTEAClassSupport;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -18,18 +18,9 @@ public class CommandUtil {
      * Returns true if passed ktClass is a Command class for which this plugin provides navigation actions
      */
     public static boolean isNavigableCommandClass(KtClassOrObject ktClass) {
-        if (DumbService.getInstance(ktClass.getProject()).isDumb()) return false;
-        return CachedValuesManager.getCachedValue(ktClass, () ->
-                CachedValueProvider.Result.create(computeIsNavigableCommandClass(ktClass),
-                        PsiModificationTracker.MODIFICATION_COUNT,
-                        KoTEAIndexService.getInstance(ktClass.getProject()).getModificationTracker()));
-    }
-
-    private static boolean computeIsNavigableCommandClass(KtClassOrObject ktClass) {
+        if (KoTEAClassifier.getInstance(ktClass.getProject()).kindOf(ktClass) != KoTEAElementKind.COMMAND) return false;
         PsiClass lightClass = LightClassUtilsKt.toLightClass(ktClass);
-        if (lightClass == null) return false;
-        if (lightClass.isInterface() || lightClass.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
-        return KoTEAIndexService.getInstance(ktClass.getProject()).getIndex().isCommand(lightClass);
+        return lightClass != null && !lightClass.isInterface() && !lightClass.hasModifierProperty(PsiModifier.ABSTRACT);
     }
 
     @Nullable

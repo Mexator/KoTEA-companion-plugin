@@ -1,7 +1,8 @@
 # index
 
-Finds every Feature Update in the project and knows its Event, Command and News Roots. The rest of the
-plugin asks only one question: "is this class an Event, a Command or News?" — through `KoTEARootsIndex`.
+Finds every Feature Update in the project and records the types it binds to Event, Command and News, as written.
+The index decides nothing: which of those types are Roots, and which kind a class is, is up to
+`com.kotea.companion.domain.KoTEAClassifier`, the only reader of the index outside this package.
 The design and its budgets are in `docs/adr/0005-kotea-index-design.md`.
 
 ## How it works
@@ -13,15 +14,15 @@ The design and its budgets are in `docs/adr/0005-kotea-index-design.md`.
    - asks `UpdateHierarchy` which records changed;
    - reads the files of their descendants again, and walks from classes that just became Updates;
    - repeats until nothing changes, then publishes a new `KoTEARootsIndex`.
-3. **Navigation** reads the latest `KoTEARootsIndex`. It never waits for the index.
+3. **Navigation** asks `KoTEAClassifier`, which reads the latest `KoTEARootsIndex`. It never waits for the index.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `KoTEAIndexService` | Entry point. Owns the worker thread, runs the scan and the change cycle, publishes the result. |
-| `KoTEARootsIndex` | The result: Root FQNs, and the nearest-Root check (`docs/adr/0002-nearest-root.md`). |
-| `KoTEAIndexComputer` | Builds records from a file or a class, and `derive`s the Roots from all records. |
+| `KoTEARootsIndex` | The result: the types Feature Updates bind to each role. |
+| `KoTEAIndexComputer` | Builds records from a file or a class, and `derive`s the bindings from all records. |
 | `UpdateScan` | The walk down the Update hierarchy, used on project open and from new Update classes. |
 | `ChangedFileReads` | Reads changed files, skipping files that name no Update in a supertype list. |
 | `ChangeCollector` | Listens to edits and disk changes and remembers which Kotlin files changed. |

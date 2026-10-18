@@ -45,7 +45,7 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         KoTEARootsIndex index = KoTEAIndexComputer.derive(byFile.values());
         assertEquals(
                 new KoTEARootsIndex(
-                        Set.of("intermediate.ProfileEvent"), Set.of("intermediate.ProfileCommand"), Set.of()),
+                        Set.of("intermediate.ProfileEvent"), Set.of("intermediate.ProfileCommand"), Set.of("kotlin.Nothing")),
                 index);
     }
 
@@ -58,7 +58,7 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         UpdateRecord record = recordFor(byFile, "nothingnews.NothingNewsUpdate");
         assertEquals("nothingnews.NnEvent", record.eventRootFqn());
         assertEquals("nothingnews.NnCommand", record.commandRootFqn());
-        assertNull("Nothing bound to News yields no News Root", record.newsRootFqn());
+        assertEquals("the record keeps Nothing as written", "kotlin.Nothing", record.newsRootFqn());
     }
 
     public void testComputeAll_newsIsNothing_directUpdateImplementation_eventAndCommandRootsStillResolve() {
@@ -71,10 +71,10 @@ public class KoTEAIndexComputerTest extends KoTEAFixtureTestCase {
         assertEmpty(record.updateAncestorFqns());
         assertEquals("bare.BareEvent", record.eventRootFqn());
         assertEquals("bare.BareCommand", record.commandRootFqn());
-        assertNull("Nothing bound to News yields no News Root", record.newsRootFqn());
+        assertEquals("the record keeps Nothing as written", "kotlin.Nothing", record.newsRootFqn());
 
         KoTEARootsIndex index = KoTEAIndexComputer.derive(byFile.values());
-        assertEquals(new KoTEARootsIndex(Set.of("bare.BareEvent"), Set.of("bare.BareCommand"), Set.of()), index);
+        assertEquals(new KoTEARootsIndex(Set.of("bare.BareEvent"), Set.of("bare.BareCommand"), Set.of("kotlin.Nothing")), index);
     }
 
     public void testComputeAll_supertypeIsATypealiasOfDslUpdate_findsTheFeatureUpdate() {

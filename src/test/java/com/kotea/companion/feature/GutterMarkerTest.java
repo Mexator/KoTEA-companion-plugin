@@ -45,7 +45,7 @@ public class GutterMarkerTest extends KoTEAFixtureTestCase {
 
     public void testNearestRootClassifiesBothConcreteCommandAndConcreteNews() {
         // Classification itself (NrShown is a News, not a Command, despite descending from
-        // NrCommand) is proven at the index layer by KoTEARootsIndexPsiTest; this only checks
+        // NrCommand) is proven at the index layer by KoTEAClassifierImplPsiTest; this only checks
         // that both still surface gutter icons end to end.
         openFixtureProject("nearestRoot");
         Map<String, Set<Icon>> gutters = koTEAGuttersByClass("nr/Contract.kt");
