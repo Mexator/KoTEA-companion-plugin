@@ -6,5 +6,8 @@
 .intellijPlatform
 .artifacts
 
+# Agents
+docs/agents/**
+
 # User-specific
 local.properties
