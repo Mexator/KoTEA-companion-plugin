@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.4.0"
+version = "1.4.1"
 
 repositories {
     mavenCentral()
@@ -61,10 +61,11 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.4.0</b>
+                <li><b>1.4.1</b>
                     <ul>
-                        <li>Change: The index is built only once: when the project opens. After that, it is only edited incrementally.</li>
-                        <li>Change: Drop PSI analysis api to build list of Events, Commands, News roots. Now using simplified solution.</li>
+                        <li>Fix: Library types such as Unit or Any are no longer treated as Events, Commands or News</li>
+                        <li>Fix: Constructing an Event, Command or News is always an emission, even inside an Update class</li>
+                        <li>Fix: Checking against an Event or News (is, as, ==, when branches) is a processing site, wherever it is</li>
                     </ul>
                 </li>
             </ul>
