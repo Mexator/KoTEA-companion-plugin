@@ -47,7 +47,10 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
         KtNameReferenceExpression ref = referenceSite instanceof KtNameReferenceExpression expression ? expression
                 : referenceSite.getParent() instanceof KtNameReferenceExpression expression ? expression : null;
         if (ref == null) return null;
-        if (PsiTreeUtil.getParentOfType(ref, KtImportDirective.class, KtSuperTypeList.class) != null) return null;
+        
+        // usage inside import - ignore
+        if (PsiTreeUtil.getParentOfType(ref, KtImportDirective.class) != null) return null;
+        if (usedAsSuperType(ref)) return null;
 
         KtClassOrObject target = ClassReferenceResolver.resolveClassOrObject(ref);
         if (target == null) return null;
@@ -58,6 +61,11 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
         if (kind != KoTEAElementKind.COMMAND) return role;
         if (isInsideHandlerOf(ref, target)) return Role.PROCESSING;
         return role == Role.EMISSION ? Role.EMISSION : null;
+    }
+
+    private static boolean usedAsSuperType(KtNameReferenceExpression ref) {
+        KtTypeReference typeReference = PsiTreeUtil.getParentOfType(ref, KtTypeReference.class);
+        return typeReference != null && PsiTreeUtil.getParentOfType(typeReference, KtSuperTypeListEntry.class) != null;
     }
 
     @Nullable

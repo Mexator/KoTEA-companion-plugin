@@ -39,6 +39,16 @@ public class KoTEARoleResolverImplPsiTest extends KoTEAFixtureTestCase {
         assertNull(roleAt("rh/RhScreen.kt", "sink += RhEvent.Reset", "RhEvent"));
     }
 
+    public void testSupertypeAndItsTypeArguments_haveNoRole() {
+        assertNull(roleAt("rh/RhHandler.kt", "CommandsFlowHandler<RhCommand, RhEvent>", "CommandsFlowHandler"));
+        assertNull(roleAt("rh/RhHandler.kt", "CommandsFlowHandler<RhCommand, RhEvent>", "RhCommand"));
+        assertNull(roleAt("rh/RhHandler.kt", "CommandsFlowHandler<RhCommand, RhEvent>", "RhEvent"));
+    }
+
+    public void testEventEmittedInsideDelegationLambda_isEmission() {
+        assertEquals(EMISSION, roleAt("rh/Delegated.kt", "configureRh({ RhEvent.Reset })", "Reset"));
+    }
+
     public void testNewsUsages() {
         assertEquals(EMISSION, roleAt("rh/DecoratorUpdate.kt", "news(RhNews.Toast)", "Toast"));
         assertEquals(PROCESSING, roleAt("rh/RhScreen.kt", "RhNews.Toast ->", "Toast"));

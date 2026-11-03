@@ -42,7 +42,7 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     public void testEventEmissions_includeObjectsAndCallableReferences() {
-        assertEquals(Set.of("RhScreen.kt:8"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RhScreen.kt:8", "Delegated.kt:8"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
         assertEquals(Set.of("RhScreen.kt:12"), sites("Clicked", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
         assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
     }
@@ -57,6 +57,11 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
         assertEquals(Set.of("DecoratorUpdate.kt:14", "RealUpdate.kt:8"), sites("Load", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
         assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/RhHandler.kt", "filterIsInstance<RhCommand.Load>", "Load"));
         assertEquals(Set.of(), guttersAt("rh/Analytics.kt", "is RhCommand.Load", "Load"));
+    }
+
+    public void testEventEmittedInsideDelegationLambda_hasGutter() {
+        assertEquals(Set.of(PluginIcons.PROCESSING),
+                guttersAt("rh/Delegated.kt", "configureRh({ RhEvent.Reset })", "Reset"));
     }
 
     /** {@code file:line} of each site {@code search} finds for the class {@code name} in Contract.kt. */
