@@ -24,13 +24,11 @@ import org.jetbrains.kotlin.asJava.LightClassUtilsKt;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.*;
 
-/**
- * An Event or News is emitted where it is used as a value and processed where it is checked against. A Command is
- * emitted the same way but processed only inside a {@code CommandsFlowHandler} that handles it.
- */
+import java.util.function.Predicate;
+
 public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
 
-    static final String COMMANDS_FLOW_HANDLER_FQN = "ru.tinkoff.kotea.core.CommandsFlowHandler";
+    private static final String COMMANDS_FLOW_HANDLER_FQN = "ru.tinkoff.kotea.core.CommandsFlowHandler";
 
     private static final TokenSet EQUALITY_OPERATIONS =
             TokenSet.create(KtTokens.EQEQ, KtTokens.EXCLEQ, KtTokens.EQEQEQ, KtTokens.EXCLEQEQEQ);
@@ -44,8 +42,7 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
     @Nullable
     @Override
     public Role roleOf(@NotNull PsiElement referenceSite) {
-        KtNameReferenceExpression ref = referenceSite instanceof KtNameReferenceExpression expression ? expression
-                : referenceSite.getParent() instanceof KtNameReferenceExpression expression ? expression : null;
+        KtNameReferenceExpression ref = PsiTreeUtil.getParentOfType(referenceSite, KtNameReferenceExpression.class, false);
         if (ref == null) return null;
         
         // usage inside import - ignore
@@ -58,9 +55,11 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
         if (kind == null) return null;
 
         Role role = roleByUsage(ref);
-        if (kind != KoTEAElementKind.COMMAND) return role;
-        if (isInsideHandlerOf(ref, target)) return Role.PROCESSING;
-        return role == Role.EMISSION ? Role.EMISSION : null;
+        return switch (kind) {
+            case EVENT, NEWS -> role;
+            case COMMAND -> isInsideCommandHandlerOf(ref, target) ? Role.PROCESSING
+                    : role == Role.EMISSION ? Role.EMISSION : null;
+        };
     }
 
     private static boolean usedAsSuperType(KtNameReferenceExpression ref) {
@@ -93,25 +92,33 @@ public final class KoTEARoleResolverImpl implements KoTEARoleResolver {
     /** {@code is}, {@code !is}, {@code as} and {@code as?} check against a type; any other type usage is no role. */
     @Nullable
     private static Role roleByType(KtUserType type) {
-        PsiElement owner = type.getParent();
-        if (owner instanceof KtNullableType) owner = owner.getParent();
-        if (!(owner instanceof KtTypeReference typeReference)) return null;
-
-        PsiElement usage = typeReference.getParent();
+        PsiElement usage = typeUsage(type);
         return usage instanceof KtIsExpression || usage instanceof KtWhenConditionIsPattern
                 || usage instanceof KtBinaryExpressionWithTypeRHS ? Role.PROCESSING : null;
     }
 
-    private static boolean isInsideHandlerOf(PsiElement site, KtClassOrObject command) {
+    @Nullable
+    private static PsiElement typeUsage(KtUserType type) {
+        PsiElement owner = type.getParent();
+        if (owner instanceof KtNullableType) owner = owner.getParent();
+        return owner instanceof KtTypeReference typeReference ? typeReference.getParent() : null;
+    }
+
+    private static boolean isInsideCommandHandlerOf(PsiElement site, KtClassOrObject command) {
         PsiClass commandClass = LightClassUtilsKt.toLightClass(command);
         if (commandClass == null) return false;
         PsiType commandType = JavaPsiFacade.getElementFactory(command.getProject()).createType(commandClass);
+        return anyEnclosingClass(site, enclosing -> {
+            PsiType handledType = handledCommandType(enclosing);
+            return handledType != null && handledType.isAssignableFrom(commandType);
+        });
+    }
 
-        for (KtClassOrObject enclosing = PsiTreeUtil.getParentOfType(site, KtClassOrObject.class);
+    private static boolean anyEnclosingClass(PsiElement element, Predicate<KtClassOrObject> predicate) {
+        for (KtClassOrObject enclosing = PsiTreeUtil.getParentOfType(element, KtClassOrObject.class);
              enclosing != null;
              enclosing = PsiTreeUtil.getParentOfType(enclosing, KtClassOrObject.class)) {
-            PsiType handledType = handledCommandType(enclosing);
-            if (handledType != null && handledType.isAssignableFrom(commandType)) return true;
+            if (predicate.test(enclosing)) return true;
         }
         return false;
     }

@@ -46,6 +46,8 @@
                         serviceImplementation="com.kotea.companion.domain.impl.KoTEAClassifierImpl"/>
         <projectService serviceInterface="com.kotea.companion.domain.KoTEARoleResolver"
                         serviceImplementation="com.kotea.companion.domain.impl.KoTEARoleResolverImpl"/>
+        <projectService serviceInterface="com.kotea.companion.domain.KoTEAMarkerResolver"
+                        serviceImplementation="com.kotea.companion.domain.impl.KoTEAMarkerResolverImpl"/>
         <registryKey key="kotea.index.batched.reads" defaultValue="true"
                      description="KoTEA index: read in short batches instead of one read action. Applies to projects opened after the change."/>
     </extensions>

@@ -47,6 +47,12 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
         assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
     }
 
+    public void testEventParameterOfUpdateHelper_leadsToEmission() {
+        assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/DecoratorUpdate.kt", "event: RhEvent.Clicked", "Clicked"));
+        assertEquals(Set.of(), guttersAt("rh/DecoratorUpdate.kt", "news: RhNews.Toast", "Toast"));
+        assertEquals(Set.of(), guttersAt("rh/DecoratorUpdate.kt", "command: RhCommand.Load", "Load"));
+    }
+
     public void testTypeOnlyUsages_haveNoGutter() {
         assertEquals(Set.of(), guttersAt("rh/RhScreen.kt", "clicked: RhEvent.Clicked", "Clicked"));
         assertEquals(Set.of(), guttersAt("rh/RhScreen.kt", "RhEvent.Refresh::class", "Refresh"));

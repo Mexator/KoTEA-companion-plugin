@@ -49,6 +49,12 @@ public class KoTEARoleResolverImplPsiTest extends KoTEAFixtureTestCase {
         assertEquals(EMISSION, roleAt("rh/Delegated.kt", "configureRh({ RhEvent.Reset })", "Reset"));
     }
 
+    public void testParameterTypesOfUpdateFunctions_haveNoRole() {
+        assertNull(roleAt("rh/DecoratorUpdate.kt", "event: RhEvent.Clicked", "Clicked"));
+        assertNull(roleAt("rh/DecoratorUpdate.kt", "news: RhNews.Toast", "Toast"));
+        assertNull(roleAt("rh/DecoratorUpdate.kt", "command: RhCommand.Load", "Load"));
+    }
+
     public void testNewsUsages() {
         assertEquals(EMISSION, roleAt("rh/DecoratorUpdate.kt", "news(RhNews.Toast)", "Toast"));
         assertEquals(PROCESSING, roleAt("rh/RhScreen.kt", "RhNews.Toast ->", "Toast"));

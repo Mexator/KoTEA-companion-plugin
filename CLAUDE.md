@@ -21,39 +21,8 @@ KoTEA Companion Plugin — a JetBrains IDE plugin for Android Studio that adds s
 
 Build output: `build/distributions/*.zip`
 
-## Architecture
-
-Navigation is kind-agnostic: the `domain` layer decides what a class is and what a reference does, and one set of
-navigation classes serves Events, Commands and News alike.
-
-### 1. Domain
-- **`KoTEAClassifier`** — the kind (Event / Command / News) of a class, from the Roots the index collects.
-- **`KoTEARoleResolver`** — the role of a reference: Emission (used as a value) or Processing (checked against;
-  for Commands only inside a `CommandsFlowHandler` that handles them).
-
-### 2. Navigation (`navigation` package)
-- **`KoTEAMarkerProvider`** — the single `lineMarkerProvider`: both gutter icons on a navigable declaration, and on
-  each reference the icon leading to the opposite role.
-- **`EmissionOrProcessingSearcher`** — finds the references of a class that play a role; results are cached per scope.
-- **`NavigationRunner`** — runs a search in the background and shows the result; shared by gutter icons and actions.
-
-### 3. Actions
-`GoToEmissionAction` and `GoToProcessingAction` (both extending `BaseGoToAction`, configured with a role) respond to
-keyboard shortcuts:
-- `Ctrl+Alt+M` → Emission
-- `Ctrl+Alt+K` → Processing
-
-### Supporting Infrastructure
-- **`ScopeBuilder`** — restricts searches to production sources, avoiding false matches in test files.
-- **`NavigableElementResolver`** — resolves a PSI element to the navigable KoTEA class it refers to, if any.
-- **`ContextPresentationProvider`** — controls how navigation results appear in the "Choose Target" popup.
-
-### Plugin Registration
-`src/main/resources/META-INF/plugin.xml` wires everything together — the line marker provider, the domain services
-and the `<keyboard-shortcut>` entries.
-
-### Threading Model
-Two invariants: never block the EDT on a heavy PSI search, and never touch PSI off the EDT without holding a read lock. How any given search meets them is an implementation choice — most currently run on a background thread via `ReadAction.nonBlocking(...).inSmartMode(project).submit(executor)` with results handed back through callbacks, but that's the prevailing pattern, not a mandate.
+## Threading
+Never block the EDT on a heavy PSI search, and never touch PSI off the EDT without holding a read lock.
 
 ## Testing
 

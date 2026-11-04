@@ -15,4 +15,12 @@ class DecoratorUpdate : DslUpdate<RhState, RhEvent, RhCommand, RhNews>() {
             else -> news(RhNews.Toast)
         }
     }
+
+    private fun NextBuilder.handleClicked(event: RhEvent.Clicked) {
+        println(event)
+    }
+
+    private fun toast(news: RhNews.Toast) = println(news)
+
+    private fun load(command: RhCommand.Load) = println(command)
 }
