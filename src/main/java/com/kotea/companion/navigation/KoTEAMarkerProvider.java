@@ -68,7 +68,7 @@ public class KoTEAMarkerProvider extends RelatedItemLineMarkerProvider {
         Role targetRole = marker == Marker.TO_EMISSION ? Role.EMISSION : Role.PROCESSING;
         String title = NavigationRunner.title(targetRole);
         GutterIconNavigationHandler<PsiElement> navHandler = (mouseEvent, elt) ->
-                NavigationRunner.navigate(target, targetRole, elt, true, NavigationRunner.atMouse(mouseEvent));
+                NavigationRunner.navigate(target, targetRole, NavigationRunner.atMouse(mouseEvent));
         return new KoteaCompanionLineMarkerInfo<>(anchor, anchor.getTextRange(),
                 marker == Marker.TO_EMISSION ? PluginIcons.EMISSION : PluginIcons.PROCESSING,
                 elt -> title, navHandler, GutterIconRenderer.Alignment.CENTER, List::of);

@@ -41,7 +41,7 @@ public abstract class BaseGoToAction extends AnAction {
         NavigableElement target = NavigableElementResolver.resolve(element);
         if (target == null) return;
 
-        NavigationRunner.navigate(target.anchor(), role, element, false, NavigationRunner.inEditor(editor));
+        NavigationRunner.navigate(target.anchor(), role, NavigationRunner.inEditor(editor));
     }
 
     @Override

@@ -5,19 +5,16 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.containers.ContainerUtil;
 import com.kotea.companion.domain.KoTEARoleResolver.Role;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 import com.kotea.companion.navigation.EmissionOrProcessingSearcher;
 import com.kotea.companion.util.PluginIcons;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
 import javax.swing.Icon;
 import java.util.List;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
@@ -29,22 +26,22 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     public void testEventCheckedOutsideUpdate_isProcessing() {
-        assertEquals(Set.of("Analytics.kt:6"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
-        assertEquals(Set.of("DecoratorUpdate.kt:9", "Analytics.kt:7"), sites("Clicked", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
+        assertEquals(Set.of("Analytics.kt:6"), sites("Reset", Role.PROCESSING));
+        assertEquals(Set.of("DecoratorUpdate.kt:9", "Analytics.kt:7"), sites("Clicked", Role.PROCESSING));
         assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/Analytics.kt", "is RhEvent.Reset", "Reset"));
     }
 
     public void testEventConstructedInsideDecoratorUpdate_isEmission() {
-        assertEquals(Set.of("DecoratorUpdate.kt:11"), sites("InvalidateCache", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
-        assertEquals(Set.of("RealUpdate.kt:8"), sites("InvalidateCache", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
+        assertEquals(Set.of("DecoratorUpdate.kt:11"), sites("InvalidateCache", Role.EMISSION));
+        assertEquals(Set.of("RealUpdate.kt:8"), sites("InvalidateCache", Role.PROCESSING));
         assertEquals(Set.of(PluginIcons.PROCESSING),
                 guttersAt("rh/DecoratorUpdate.kt", "RealEvent.InvalidateCache,", "InvalidateCache"));
     }
 
     public void testEventEmissions_includeObjectsAndCallableReferences() {
-        assertEquals(Set.of("RhScreen.kt:8", "Delegated.kt:8"), sites("Reset", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
-        assertEquals(Set.of("RhScreen.kt:12"), sites("Clicked", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
-        assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RhScreen.kt:8", "Delegated.kt:8"), sites("Reset", Role.EMISSION));
+        assertEquals(Set.of("RhScreen.kt:12"), sites("Clicked", Role.EMISSION));
+        assertEquals(Set.of("RhHandler.kt:11"), sites("Refresh", Role.EMISSION));
     }
 
     public void testEventParameterOfUpdateHelper_leadsToEmission() {
@@ -59,8 +56,8 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     public void testCommandProcessing_staysInsideCommandsFlowHandler() {
-        assertEquals(Set.of("RhHandler.kt:11"), sites("Load", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING)));
-        assertEquals(Set.of("DecoratorUpdate.kt:14", "RealUpdate.kt:8"), sites("Load", (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION)));
+        assertEquals(Set.of("RhHandler.kt:11"), sites("Load", Role.PROCESSING));
+        assertEquals(Set.of("DecoratorUpdate.kt:14", "RealUpdate.kt:8"), sites("Load", Role.EMISSION));
         assertEquals(Set.of(PluginIcons.EMISSION), guttersAt("rh/RhHandler.kt", "filterIsInstance<RhCommand.Load>", "Load"));
         assertEquals(Set.of(), guttersAt("rh/Analytics.kt", "is RhCommand.Load", "Load"));
     }
@@ -71,10 +68,9 @@ public class RoleHeuristicsTest extends KoTEAFixtureTestCase {
     }
 
     /** {@code file:line} of each site {@code search} finds for the class {@code name} in Contract.kt. */
-    private Set<String> sites(String name, BiFunction<KtClassOrObject, GlobalSearchScope, List<PsiElement>> search) {
+    private Set<String> sites(String name, Role role) {
         KtClassOrObject target = ktClass("rh/Contract.kt", name);
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
-        return ReadAction.compute(() -> search.apply(target, scope).stream().map(site -> {
+        return ReadAction.compute(() -> EmissionOrProcessingSearcher.find(target, role).stream().map(site -> {
             PsiFile file = site.getContainingFile();
             Document document = file.getViewProvider().getDocument();
             return file.getName() + ":" + (document.getLineNumber(site.getTextRange().getStartOffset()) + 1);

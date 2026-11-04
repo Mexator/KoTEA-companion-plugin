@@ -16,12 +16,10 @@ import com.intellij.openapi.ui.popup.JBPopup;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.intellij.pom.Navigatable;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.awt.RelativePoint;
 import com.kotea.companion.domain.KoTEARoleResolver.Role;
 import com.kotea.companion.util.ContextPresentationProvider;
 import com.kotea.companion.util.PerfLog;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
@@ -51,12 +49,7 @@ public final class NavigationRunner {
         return "Go to " + displayName(role);
     }
 
-    /**
-     * @param context     the element navigation starts from; its module and project bound the search
-     * @param moduleFirst search the module of {@code context} first and the project only if nothing is found there
-     */
-    public static void navigate(@NotNull KtClassOrObject target, @NotNull Role role, @NotNull PsiElement context,
-                                boolean moduleFirst, @NotNull Presenter presenter) {
+    public static void navigate(@NotNull KtClassOrObject target, @NotNull Role role, @NotNull Presenter presenter) {
         String lockKey = lockKey(target, role);
         if (!SearchLock.tryLock(lockKey)) {
             presenter.showMessage("Search already in progress");
@@ -64,29 +57,17 @@ public final class NavigationRunner {
         }
 
         Project project = target.getProject();
-        String title = title(role);
-        ProgressManager.getInstance().run(new Task.Backgroundable(project, title, true) {
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, title(role), true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
                 indicator.setIndeterminate(true);
                 try {
-                    List<PsiElement> targets = List.of();
-                    String scopeName = "project";
-                    if (moduleFirst) {
-                        indicator.setText("Searching in module...");
-                        targets = search(target, role, ReadAction.compute(() -> ScopeBuilder.getModuleScope(context)), "module");
-                        scopeName = "module";
-                    }
-                    if (targets.isEmpty() && !indicator.isCanceled()) {
-                        indicator.setText("Searching in project...");
-                        targets = search(target, role, ReadAction.compute(() -> ScopeBuilder.getProductionScope(context)), "project");
-                        scopeName = "project";
-                    }
+                    long start = PerfLog.start();
+                    List<PsiElement> targets = ReadAction.compute(() -> EmissionOrProcessingSearcher.find(target, role));
+                    PerfLog.logElapsed(LOG, displayName(role) + " search", start);
                     if (indicator.isCanceled()) return;
 
-                    List<PsiElement> found = targets;
-                    String popupTitle = moduleFirst ? title + " — " + scopeName : title;
-                    ApplicationManager.getApplication().invokeLater(() -> show(found, role, popupTitle, project, presenter));
+                    ApplicationManager.getApplication().invokeLater(() -> show(targets, role, project, presenter));
                 } finally {
                     SearchLock.unlock(lockKey);
                 }
@@ -126,14 +107,7 @@ public final class NavigationRunner {
         };
     }
 
-    private static List<PsiElement> search(KtClassOrObject target, Role role, GlobalSearchScope scope, String scopeName) {
-        long start = PerfLog.start();
-        List<PsiElement> targets = ReadAction.compute(() -> EmissionOrProcessingSearcher.find(target, scope, role));
-        PerfLog.logElapsed(LOG, scopeName + "-scope " + displayName(role) + " search", start);
-        return targets;
-    }
-
-    private static void show(List<PsiElement> targets, Role role, String popupTitle, Project project, Presenter presenter) {
+    private static void show(List<PsiElement> targets, Role role, Project project, Presenter presenter) {
         if (targets.isEmpty()) {
             presenter.showMessage("No " + displayName(role).toLowerCase() + " usages found");
         } else if (targets.size() == 1) {
@@ -141,7 +115,7 @@ public final class NavigationRunner {
         } else {
             presenter.showPopup(new PsiTargetNavigator<>(targets)
                     .presentationProvider(ContextPresentationProvider::getPresentation)
-                    .createPopup(project, popupTitle));
+                    .createPopup(project, title(role)));
         }
     }
 

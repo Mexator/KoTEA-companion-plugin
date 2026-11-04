@@ -4,12 +4,10 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.kotea.companion.domain.KoTEARoleResolver.Role;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 import com.kotea.companion.navigation.EmissionOrProcessingSearcher;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
@@ -67,14 +65,12 @@ public class SearcherEdgeCaseTest extends KoTEAFixtureTestCase {
 
     private List<PsiElement> eventEmissions(String declName) {
         KtClassOrObject decl = ktClass("edges/Events.kt", declName);
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
-        return ReadAction.compute(() -> EmissionOrProcessingSearcher.find(decl, scope, Role.EMISSION));
+        return ReadAction.compute(() -> EmissionOrProcessingSearcher.find(decl, Role.EMISSION));
     }
 
     private List<PsiElement> commandEmission(String declName) {
         KtClassOrObject decl = ktClass("edges/Commands.kt", declName);
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
-        return ReadAction.compute(() -> EmissionOrProcessingSearcher.find(decl, scope, Role.EMISSION));
+        return ReadAction.compute(() -> EmissionOrProcessingSearcher.find(decl, Role.EMISSION));
     }
 
     /**

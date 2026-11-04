@@ -15,7 +15,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.TestActionEvent;
 import com.kotea.companion.actions.GoToEmissionAction;
@@ -25,14 +24,12 @@ import com.kotea.companion.domain.KoTEARoleResolver.Role;
 import com.kotea.companion.fixtures.KoTEAFixtureTestCase;
 import com.kotea.companion.navigation.EmissionOrProcessingSearcher;
 import com.kotea.companion.util.PluginIcons;
-import com.kotea.companion.util.ScopeBuilder;
 import org.jetbrains.kotlin.psi.KtClassOrObject;
 
 import javax.swing.Icon;
 import javax.swing.JPanel;
 import java.awt.event.MouseEvent;
 import java.util.List;
-import java.util.function.BiFunction;
 
 public class NavigationTest extends KoTEAFixtureTestCase {
 
@@ -44,7 +41,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testEventEmission() {
         Site expected = singleSearcherTarget("cov/Events.kt", "ItemClicked",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION));
+                Role.EMISSION);
         assertEquals("CovViewModel.kt", expected.file());
 
         assertActionLandsOn(new GoToEmissionAction(), "cov/Events.kt", "ItemClicked", expected);
@@ -53,7 +50,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testEventProcessing() {
         Site expected = singleSearcherTarget("cov/Events.kt", "ItemClicked",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING));
+                Role.PROCESSING);
         assertEquals("CovUpdate.kt", expected.file());
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/Events.kt", "ItemClicked", expected);
@@ -62,7 +59,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testCommandEmission() {
         Site expected = singleSearcherTarget("cov/Commands.kt", "LoadItems",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION));
+                Role.EMISSION);
         assertEquals("CovUpdate.kt", expected.file());
 
         assertActionLandsOn(new GoToEmissionAction(), "cov/Commands.kt", "LoadItems", expected);
@@ -71,7 +68,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testCommandProcessing() {
         Site expected = singleSearcherTarget("cov/Commands.kt", "LoadItems",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING));
+                Role.PROCESSING);
         assertEquals("CovHandler.kt", expected.file());
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/Commands.kt", "LoadItems", expected);
@@ -80,10 +77,9 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testEventEmissionThenProcessing_onSameTargetDoNotCollide() {
         KtClassOrObject target = ktClass("cov/Events.kt", "ItemClicked");
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
 
-        Site emission = ReadAction.compute(() -> siteOf(single(EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION))));
-        Site processing = ReadAction.compute(() -> siteOf(single(EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING))));
+        Site emission = ReadAction.compute(() -> siteOf(single(EmissionOrProcessingSearcher.find(target, Role.EMISSION))));
+        Site processing = ReadAction.compute(() -> siteOf(single(EmissionOrProcessingSearcher.find(target, Role.PROCESSING))));
 
         assertEquals("CovViewModel.kt", emission.file());
         assertEquals("CovUpdate.kt", processing.file());
@@ -91,7 +87,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testNewsEmission() {
         Site expected = singleSearcherTarget("cov/News.kt", "ShowError",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.EMISSION));
+                Role.EMISSION);
         assertEquals("CovUpdate.kt", expected.file());
 
         assertActionLandsOn(new GoToEmissionAction(), "cov/News.kt", "ShowError", expected);
@@ -100,7 +96,7 @@ public class NavigationTest extends KoTEAFixtureTestCase {
 
     public void testNewsProcessing() {
         Site expected = singleSearcherTarget("cov/News.kt", "ShowError",
-                (target, scope) -> EmissionOrProcessingSearcher.find(target, scope, Role.PROCESSING));
+                Role.PROCESSING);
         assertEquals("CovFragment.kt", expected.file());
 
         assertActionLandsOn(new GoToProcessingAction(), "cov/News.kt", "ShowError", expected);
@@ -149,10 +145,9 @@ public class NavigationTest extends KoTEAFixtureTestCase {
     // --- the searcher boundary: exactly one target ---
 
     private Site singleSearcherTarget(String declPath, String declName,
-                                      BiFunction<KtClassOrObject, GlobalSearchScope, List<PsiElement>> search) {
+                                      Role role) {
         KtClassOrObject decl = ktClass(declPath, declName);
-        GlobalSearchScope scope = ScopeBuilder.getProductionScope(getProject());
-        List<PsiElement> targets = ReadAction.compute(() -> search.apply(decl, scope));
+        List<PsiElement> targets = ReadAction.compute(() -> EmissionOrProcessingSearcher.find(decl, role));
         assertSize(1, targets);
         return ReadAction.compute(() -> siteOf(targets.getFirst()));
     }
