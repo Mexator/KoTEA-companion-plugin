@@ -67,6 +67,8 @@ intellijPlatform {
                     <ul>
                         <li>Fix: Emissions/processings in lambdas declared in constructors were incorrectly skipped</li>
                         <li>Feature: Helper functions inside Update class (<code>handleX(e: SomeEvent)</code>) allow going to emission</li>
+                        <li>Change: Navigation always searches the whole project instead of the current module first</li>
+                        <li>Build: Target Android Studio Rabbit 2 (2026.2.2)</li>
                     </ul>
                 </li>
             </ul>
