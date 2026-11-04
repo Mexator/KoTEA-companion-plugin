@@ -42,12 +42,14 @@ val localProperties = Properties().apply {
 intellijPlatformTesting {
     runIde {
         register("runLocalIde") {
-            val androidStudioLocalPath = localProperties.getProperty("androidStudio.localPath")
-                ?: error(
-                    "runLocalIde requires 'androidStudio.localPath=/path/to/android-studio' " +
-                            "to be set in local.properties (pointing at your local Android Studio install)."
-                )
-            localPath = file(androidStudioLocalPath)
+            localPath = layout.dir(provider {
+                val androidStudioLocalPath = localProperties.getProperty("androidStudio.localPath")
+                    ?: throw GradleException(
+                        "runLocalIde requires 'androidStudio.localPath=/path/to/android-studio' " +
+                                "to be set in local.properties (pointing at your local Android Studio install)."
+                    )
+                file(androidStudioLocalPath)
+            })
             useInstaller = false
         }
     }
