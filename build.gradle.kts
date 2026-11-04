@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kotea.companion"
-version = "1.4.1"
+version = "1.4.2"
 
 repositories {
     mavenCentral()
@@ -63,11 +63,10 @@ intellijPlatform {
 
         changeNotes = """
             <ul>
-                <li><b>1.4.1</b>
+                <li><b>1.4.2</b>
                     <ul>
-                        <li>Fix: Library types such as Unit or Any are no longer treated as Events, Commands or News</li>
-                        <li>Fix: Constructing an Event, Command or News is always an emission, even inside an Update class</li>
-                        <li>Fix: Checking against an Event or News (is, as, ==, when branches) is a processing site, wherever it is</li>
+                        <li>Fix: Emissions/processings in lambdas declared in constructors were incorrectly skipped</li>
+                        <li>Feature: Helper functions inside Update class (<code>handleX(e: SomeEvent)</code>) allow going to emission</li>
                     </ul>
                 </li>
             </ul>
